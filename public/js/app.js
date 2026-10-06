@@ -39,6 +39,12 @@
     desce: '<path d="M17 7 7 17M17 17H7V7"/>',
     cofre: '<path d="M19 5c-1.5 0-2.8 1.4-3 2-3.5-1.5-11-.3-11 5 0 1.8 0 3 2 4.5V20h4v-2h3v2h4v-4c1-.5 1.7-1 2-2h2v-4h-2c0-1-.5-1.5-1-2V5z"/><path d="M2 9v1c0 1.1.9 2 2 2h1"/><path d="M16 11h.01"/>',
     parcela: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/>',
+    cadeado: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+    destravar: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>',
+    chave: '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/>',
+    copiar: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+    sair: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
+    usuarios: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
   };
   const ic = (nome, extra = '') => `<svg class="ic ${extra}" viewBox="0 0 24 24" aria-hidden="true">${ICONES[nome] || ''}</svg>`;
   const hidratar = (raiz = document) => $$('i[data-ic]', raiz).forEach((el) => { el.outerHTML = ic(el.dataset.ic); });
@@ -51,24 +57,79 @@
     <path d="m84 70 6 6 10-12" stroke="#005ea4" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
     <circle cx="136" cy="26" r="5" fill="#dcf4f9"/><path d="M136 21v10M131 26h10" stroke="#005ea4" stroke-width="2.5" stroke-linecap="round"/></svg>`;
 
-  // ---------- armazenamento ----------
-  const CHAVE = 'vertice:dados';
+  // ---------- preferências locais (só de interface) ----------
   const CHAVE_PREFS = 'vertice:prefs';
   const ler = (k, padrao) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : padrao; } catch { return padrao; } };
   const gravar = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } };
+  let prefs = { categoria: 'fixa', ordem: 'venc', ...ler(CHAVE_PREFS, {}) };
+  const salvarPrefs = () => gravar(CHAVE_PREFS, prefs);
 
-  const bruto = ler(CHAVE, null);
-  let dados = { versao: N.VERSAO_DADOS, perfil: { nome: '' }, lancamentos: [] };
-  if (bruto) {
-    try { dados = { ...dados, perfil: bruto.perfil || dados.perfil, lancamentos: N.lerBackup(bruto).lancamentos }; } catch { /* mantém vazio */ }
+  // ---------- servidor ----------
+  let eu = null;                     // usuário logado
+  let dados = { lancamentos: [] };   // lançamentos do usuário
+  let rev = 0;                       // revisão dos dados no servidor
+
+  async function api(metodo, url, corpo) {
+    const r = await fetch(url, {
+      method: metodo, credentials: 'same-origin',
+      headers: corpo === undefined ? {} : { 'Content-Type': 'application/json' },
+      body: corpo === undefined ? undefined : JSON.stringify(corpo),
+    });
+    if (r.status === 401 && url !== '/api/eu/senha') { location.replace('/entrar'); throw new Error('Sessão expirada.'); }
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw Object.assign(new Error(d.erro || 'Erro no servidor. Tente novamente.'), { status: r.status, dados: d });
+    return d;
   }
-  let prefs = { categoria: 'fixa', ordem: 'venc', ultimoBackup: null, migrado: false, ...ler(CHAVE_PREFS, {}) };
+
+  // Cada alteração é enviada ao servidor; alterações feitas durante um envio seguem no envio seguinte.
+  const sinc = { ocupado: false, pendente: false, estado: 'ok', tentativa: null };
+  function marcarSinc(estado) {
+    sinc.estado = estado;
+    const el = $('#sinc');
+    if (!el) return;
+    el.className = 'sinc ' + estado;
+    el.textContent = { ok: 'Salvo na nuvem', salvando: 'Salvando…', erro: 'Sem conexão · tentando de novo' }[estado];
+  }
+  async function sincronizar() {
+    if (sinc.ocupado) { sinc.pendente = true; return; }
+    sinc.ocupado = true;
+    clearTimeout(sinc.tentativa);
+    marcarSinc('salvando');
+    try {
+      do {
+        sinc.pendente = false;
+        try {
+          rev = (await api('PUT', '/api/dados', { rev, lancamentos: dados.lancamentos })).rev;
+          marcarSinc('ok');
+        } catch (e) {
+          if (e.status === 409) {
+            rev = e.dados.rev; dados.lancamentos = e.dados.lancamentos;
+            sinc.pendente = false; marcarSinc('ok'); render();
+            toast('Seus dados mudaram em outro dispositivo. Carreguei a versão mais recente; confira a última alteração.', { erro: true, tempo: 9000 });
+          } else if (e.status >= 400 && e.status < 500) {
+            marcarSinc('erro'); toast(e.message, { erro: true });
+          } else {
+            marcarSinc('erro');
+            sinc.tentativa = setTimeout(sincronizar, 10000);
+          }
+          break;
+        }
+      } while (sinc.pendente);
+    } finally { sinc.ocupado = false; }
+  }
+  /** Traz alterações feitas em outro dispositivo (ao voltar para a aba). */
+  async function atualizarDoServidor() {
+    if (sinc.ocupado || sinc.estado !== 'ok' || $('.fundo-modal')) return;
+    try {
+      const d = await api('GET', '/api/dados');
+      if (d.rev !== rev && !sinc.ocupado) { rev = d.rev; dados.lancamentos = d.lancamentos; render(); }
+    } catch { /* tenta de novo na próxima vez */ }
+  }
 
   function salvar() {
-    if (!gravar(CHAVE, dados)) toast('Não foi possível salvar neste navegador. Baixe um backup.', { erro: true });
     render();
+    sincronizar();
   }
-  const salvarPrefs = () => gravar(CHAVE_PREFS, prefs);
 
   // ---------- estado da tela ----------
   const agora = new Date();
@@ -95,7 +156,7 @@
   }
 
   // ---------- modais ----------
-  function abrirModal(html, { estreito = false } = {}) {
+  function abrirModal(html, { estreito = false, fixo = false } = {}) {
     const anterior = document.activeElement;
     const fundo = document.createElement('div');
     fundo.className = 'fundo-modal';
@@ -105,9 +166,9 @@
     document.body.append(fundo);
     hidratar(fundo);
     const fechar = () => { fundo.remove(); document.removeEventListener('keydown', teclas); anterior?.focus?.(); };
-    function teclas(e) { if (e.key === 'Escape' && $$('.fundo-modal').at(-1) === fundo) { e.stopPropagation(); fechar(); fundo.dispatchEvent(new Event('cancelado')); } }
+    function teclas(e) { if (!fixo && e.key === 'Escape' && $$('.fundo-modal').at(-1) === fundo) { e.stopPropagation(); fechar(); fundo.dispatchEvent(new Event('cancelado')); } }
     document.addEventListener('keydown', teclas);
-    fundo.addEventListener('mousedown', (e) => { if (e.target === fundo) { fechar(); fundo.dispatchEvent(new Event('cancelado')); } });
+    fundo.addEventListener('mousedown', (e) => { if (!fixo && e.target === fundo) { fechar(); fundo.dispatchEvent(new Event('cancelado')); } });
     $$('[data-fechar]', fundo).forEach((b) => b.addEventListener('click', () => { fechar(); fundo.dispatchEvent(new Event('cancelado')); }));
     setTimeout(() => (fundo.querySelector('[autofocus]') || fundo.querySelector('input, button:not([data-fechar])'))?.focus(), 30);
     return { fundo, modal, fechar };
@@ -138,7 +199,7 @@
   function confirmar({ titulo, texto, botao = 'Confirmar', perigo = false, palavra = null }) {
     return new Promise((ok) => {
       const { fundo, modal, fechar } = abrirModal(`
-        <form class="modal" role="dialog" aria-modal="true" aria-labelledby="t-conf" novalidate>
+        <form class="modal" role="dialog" aria-modal="true" aria-labelledby="t-conf" novalidate autocomplete="off">
           <div class="cab-modal"><h2 id="t-conf">${esc(titulo)}</h2>
             <button type="button" class="btn fantasma icone" data-fechar aria-label="Fechar"><i data-ic="x"></i></button></div>
           <p style="margin-top:0">${texto}</p>
@@ -149,7 +210,7 @@
           </div>
         </form>`, { estreito: true });
       fundo.addEventListener('cancelado', () => ok(false));
-      if (palavra) $('#c-palavra', modal).addEventListener('input', (e) => { $('#c-ok', modal).disabled = e.target.value.trim().toUpperCase() !== palavra; });
+      if (palavra) $('#c-palavra', modal).addEventListener('input', (e) => { $('#c-ok', modal).disabled = e.target.value.trim().toLowerCase() !== palavra.toLowerCase(); });
       modal.addEventListener('submit', (e) => { e.preventDefault(); if ($('#c-ok', modal).disabled) return; fechar(); ok(true); });
     });
   }
@@ -296,7 +357,7 @@
   }
   function lerHash() {
     const s = location.hash.replace('#', '');
-    est.secao = ['mes', 'ano', 'ajustes'].includes(s) ? s : 'mes';
+    est.secao = ['mes', 'ano', 'ajustes'].includes(s) || (s === 'usuarios' && eu?.perfil === 'admin') ? s : 'mes';
     render();
     window.scrollTo({ top: 0 });
   }
@@ -310,6 +371,7 @@
     if (est.secao === 'mes') renderMes();
     if (est.secao === 'ano') renderAno();
     if (est.secao === 'ajustes') renderAjustes();
+    if (est.secao === 'usuarios') renderUsuarios();
   }
 
   function atrasados() {
@@ -318,13 +380,16 @@
   }
 
   function renderTopo() {
-    const nome = (dados.perfil.nome || '').trim();
+    const nome = (eu?.nome || '').trim();
     const h = new Date().getHours();
     $('#saudacao').textContent = `${h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite'}${nome ? ', ' + nome.split(' ')[0] : ''}`;
     $('#hoje').textContent = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
     $('#nome-usuario').textContent = nome || 'Você';
     $('#av-usuario').textContent = (nome || 'V').split(/\s+/).map((p) => p[0]).slice(0, 2).join('').toUpperCase();
     const ano = est.secao === 'ano';
+    const comPeriodo = ['mes', 'ano'].includes(est.secao);
+    $('.topo .mes').hidden = !comPeriodo;
+    $('#btn-hoje').hidden = !comPeriodo;
     $('#rotulo-periodo').textContent = ano ? 'Ano de referência' : 'Mês de referência';
     $('#nome-mes').textContent = ano ? est.ano : `${MESES[est.mes]} ${est.ano}`;
     $('#competencia').value = `${est.ano}-${String(est.mes + 1).padStart(2, '0')}`;
@@ -365,12 +430,6 @@
       avisos.push(`<div class="aviso-box alerta">${ic('alerta')}<div><b>${atr.length} ${atr.length > 1 ? 'lançamentos atrasados' : 'lançamento atrasado'}</b> somando ${moeda(soma)}.</div>
         <button type="button" class="btn perigo peq" data-filtro="atrasados">Ver atrasados</button></div>`);
     }
-    const dias = prefs.ultimoBackup ? (Date.now() - prefs.ultimoBackup) / 86400000 : Infinity;
-    if (dados.lancamentos.length >= 10 && dias > 30) {
-      avisos.push(`<div class="aviso-box cuidado">${ic('escudo')}<div>${prefs.ultimoBackup ? `Seu último backup tem ${Math.floor(dias)} dias.` : 'Você ainda não baixou um backup.'} Os dados ficam só neste navegador.</div>
-        <button type="button" class="btn sec peq" data-exportar>Baixar backup</button></div>`);
-    }
-    if (!dados.lancamentos.length) avisos.push(avisoMigracao());
     $('#aviso-atrasados').innerHTML = avisos.join('');
 
     // filtros
@@ -494,35 +553,6 @@
     $('#tabela-ano').innerHTML = html;
   }
 
-  // ---------- migração do Vértice antigo ----------
-  function dadosAntigos() {
-    const achados = [];
-    try {
-      for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i);
-        if (!k || !k.startsWith('vertice_stable_')) continue;
-        const arr = JSON.parse(localStorage.getItem(k) || '[]');
-        if (Array.isArray(arr) && arr.length) achados.push({ chave: k, email: k.slice('vertice_stable_'.length), arr });
-      }
-    } catch { /* ignora */ }
-    return achados;
-  }
-  function avisoMigracao() {
-    if (prefs.migrado) return '';
-    const ant = dadosAntigos();
-    if (!ant.length) return '';
-    const total = ant.reduce((s, a) => s + a.arr.length, 0);
-    return `<div class="aviso-box info">${ic('repetir')}<div><b>Encontramos ${total} lançamentos do Vértice antigo</b> neste navegador (${ant.map((a) => esc(a.email)).join(', ')}).</div>
-      <button type="button" class="btn peq" data-migrar>Importar agora</button></div>`;
-  }
-  function migrar() {
-    const novos = dadosAntigos().flatMap((a) => N.migrarAntigo(a.arr));
-    dados.lancamentos.push(...novos);
-    prefs.migrado = true; salvarPrefs();
-    salvar();
-    toast(`${novos.length} lançamentos importados. O dia de vencimento ficou como 10; ajuste se precisar.`, { tempo: 7000 });
-  }
-
   // ---------- backup ----------
   function baixar(nome, conteudo, tipo) {
     const url = URL.createObjectURL(new Blob([conteudo], { type: tipo }));
@@ -533,10 +563,8 @@
   function exportar() {
     const d = new Date();
     const carimbo = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    baixar(`vertice-backup-${carimbo}.json`, JSON.stringify({ ...dados, versao: N.VERSAO_DADOS, exportadoEm: d.toISOString() }, null, 2), 'application/json');
-    prefs.ultimoBackup = Date.now(); salvarPrefs();
-    render();
-    toast('Backup baixado.');
+    baixar(`vertice-backup-${carimbo}.json`, JSON.stringify({ versao: N.VERSAO_DADOS, lancamentos: dados.lancamentos, exportadoEm: d.toISOString() }, null, 2), 'application/json');
+    toast('Cópia dos dados baixada.');
   }
   async function importar(arquivo) {
     let lido;
@@ -566,17 +594,188 @@
       const ids = new Set(lido.lancamentos.map((l) => l.id));
       dados.lancamentos = [...antes.filter((l) => !ids.has(l.id)), ...lido.lancamentos];
     }
-    if (lido.perfil?.nome && !dados.perfil.nome) dados.perfil.nome = String(lido.perfil.nome).slice(0, 60);
     salvar();
     toast(`${lido.lancamentos.length} lançamentos restaurados.`, { acao: () => { dados.lancamentos = antes; salvar(); } });
   }
 
   function renderAjustes() {
-    $('#perfil-nome').value = dados.perfil.nome || '';
+    $('#perfil-nome').value = eu.nome || '';
+    $('#perfil-login').textContent = eu.login;
     const n = dados.lancamentos.length;
-    $('#info-backup').textContent = `${n} ${n === 1 ? 'lançamento salvo' : 'lançamentos salvos'} neste navegador. `
-      + (prefs.ultimoBackup ? `Último backup em ${new Date(prefs.ultimoBackup).toLocaleDateString('pt-BR')}.` : 'Nenhum backup baixado ainda.');
-    $('#aviso-migracao').innerHTML = avisoMigracao();
+    $('#info-backup').textContent = `${n} ${n === 1 ? 'lançamento salvo' : 'lançamentos salvos'} na sua conta. Baixe uma cópia quando quiser guardar ou levar para uma planilha.`;
+  }
+
+  // ---------- conta ----------
+  function trocarSenha({ obrigatoria = false } = {}) {
+    const { modal, fechar } = abrirModal(`
+      <form class="modal" role="dialog" aria-modal="true" aria-labelledby="t-senha" novalidate>
+        <div class="cab-modal"><h2 id="t-senha">${obrigatoria ? 'Crie a sua senha' : 'Trocar senha'}</h2>
+          ${obrigatoria ? '' : '<button type="button" class="btn fantasma icone" data-fechar aria-label="Fechar"><i data-ic="x"></i></button>'}</div>
+        ${obrigatoria ? '<p style="margin-top:0">Você entrou com uma senha temporária. Defina uma senha só sua para continuar.</p>' : ''}
+        <input type="text" autocomplete="username" value="${esc(eu.login)}" hidden>
+        <div class="grade-form">
+          <div class="inteiro"><label class="rotulo" for="s-atual">${obrigatoria ? 'Senha temporária' : 'Senha atual'}</label>
+            <input type="password" id="s-atual" autocomplete="current-password" required></div>
+          <div><label class="rotulo" for="s-nova">Nova senha <small>(mínimo 8 caracteres)</small></label>
+            <input type="password" id="s-nova" autocomplete="new-password" minlength="8" required></div>
+          <div><label class="rotulo" for="s-conf">Repita a nova senha</label>
+            <input type="password" id="s-conf" autocomplete="new-password" required></div>
+        </div>
+        <p class="erro-campo" id="s-erro" role="alert"></p>
+        <div class="rodape-modal">
+          ${obrigatoria ? '<button type="button" class="btn fantasma" data-sair>Sair</button>' : '<button type="button" class="btn sec" data-fechar>Cancelar</button>'}
+          <button class="btn">${ic('check')} Salvar senha</button>
+        </div>
+      </form>`, { estreito: true, fixo: obrigatoria });
+    modal.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const atual = $('#s-atual', modal).value, nova = $('#s-nova', modal).value;
+      const erro = (m) => { $('#s-erro', modal).textContent = m; };
+      if (nova.length < 8) return erro('A nova senha precisa ter pelo menos 8 caracteres.');
+      if (nova !== $('#s-conf', modal).value) return erro('As duas senhas novas não são iguais.');
+      try {
+        await api('POST', '/api/eu/senha', { atual, nova });
+        eu.trocarSenha = false;
+        fechar();
+        toast('Senha atualizada.');
+      } catch (er) { erro(er.message); }
+    });
+  }
+
+  async function sair() {
+    if (sinc.ocupado || sinc.estado === 'erro') {
+      const ok = await confirmar({ titulo: 'Sair agora?', texto: 'A última alteração ainda não foi salva no servidor e pode se perder.', botao: 'Sair mesmo assim', perigo: true });
+      if (!ok) return;
+    }
+    try { await api('POST', '/api/logout', {}); } catch { /* sai de qualquer forma */ }
+    location.replace('/entrar');
+  }
+
+  // ---------- administração de usuários (só admin) ----------
+  const dataHora = (s) => (s ? new Date(s.replace(' ', 'T') + 'Z').toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '');
+  const iniciais = (nome) => String(nome || '?').trim().split(/\s+/).filter((p) => !/^(da|de|do|das|dos|e)$/i.test(p)).map((p) => p[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
+  let usuarios = [];
+
+  async function renderUsuarios() {
+    const corpo = $('#tabela-usuarios');
+    if (!usuarios.length) corpo.innerHTML = '<tbody><tr><td>Carregando…</td></tr></tbody>';
+    try {
+      const [lista, aud] = await Promise.all([api('GET', '/api/admin/usuarios'), api('GET', '/api/admin/auditoria?limite=100')]);
+      usuarios = lista;
+      const ativos = lista.filter((u) => u.ativo).length;
+      $('#resumo-usuarios').textContent = `${lista.length} ${lista.length === 1 ? 'conta' : 'contas'} · ${ativos} ${ativos === 1 ? 'ativa' : 'ativas'}${lista.length - ativos ? ` · ${lista.length - ativos} bloqueada(s)` : ''}`;
+      corpo.innerHTML = `<thead><tr><th>Usuário</th><th class="esconder-cel">Perfil</th><th>Situação</th><th class="esconder-cel">Último acesso</th><th></th></tr></thead><tbody>${lista.map((u) => {
+        const souEu = u.id === eu.id;
+        return `<tr class="${u.ativo ? '' : 'inativo'}">
+          <td><div class="pessoa"><span class="av">${esc(iniciais(u.nome))}</span><div><b>${esc(u.nome)}${souEu ? ' <span class="tag info">você</span>' : ''}</b><small>${esc(u.login)}${u.perfil === 'admin' ? '<span class="so-celular"> · admin</span>' : ''}</small></div></div></td>
+          <td class="esconder-cel">${u.perfil === 'admin' ? '<span class="tag indigo">Administrador</span>' : '<span class="tag neutra">Usuário</span>'}</td>
+          <td>${!u.ativo ? `<span class="tag erro">${ic('cadeado')} Bloqueado</span>` : u.trocarSenha ? `<span class="tag aviso">${ic('relogio')} Aguardando 1º acesso</span>` : `<span class="tag ok">${ic('check')} Ativo</span>`}</td>
+          <td class="esconder-cel">${u.ultimoAcesso ? esc(dataHora(u.ultimoAcesso)) : '<span class="suave">Nunca entrou</span>'}</td>
+          <td class="acoes">
+            <button type="button" class="btn fantasma icone peq" data-usr="editar" data-uid="${u.id}" title="Editar" aria-label="Editar ${esc(u.nome)}">${ic('editar')}</button>
+            ${souEu ? '' : `
+            <button type="button" class="btn fantasma icone peq" data-usr="senha" data-uid="${u.id}" title="Redefinir senha" aria-label="Redefinir senha de ${esc(u.nome)}">${ic('chave')}</button>
+            <button type="button" class="btn fantasma icone peq" data-usr="${u.ativo ? 'bloquear' : 'desbloquear'}" data-uid="${u.id}" title="${u.ativo ? 'Bloquear' : 'Desbloquear'}" aria-label="${u.ativo ? 'Bloquear' : 'Desbloquear'} ${esc(u.nome)}">${ic(u.ativo ? 'cadeado' : 'destravar')}</button>
+            <button type="button" class="btn fantasma icone peq apagar" data-usr="excluir" data-uid="${u.id}" title="Excluir" aria-label="Excluir ${esc(u.nome)}">${ic('lixo')}</button>`}
+          </td></tr>`;
+      }).join('')}</tbody>`;
+      $('#auditoria').innerHTML = aud.length
+        ? aud.map((a) => `<li><time>${esc(dataHora(a.criado_em))}</time><span><b>${esc(a.usuario)}</b> ${esc(a.acao)}${a.detalhe ? ` · <span class="suave">${esc(a.detalhe)}</span>` : ''}</span></li>`).join('')
+        : '<li><span class="suave">Nenhuma atividade ainda.</span></li>';
+    } catch (e) {
+      corpo.innerHTML = `<tbody><tr><td class="txt-erro">${esc(e.message)}</td></tr></tbody>`;
+    }
+  }
+
+  function mostrarSenha(titulo, u, senha) {
+    const { modal } = abrirModal(`
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="t-tmp">
+        <div class="cab-modal"><h2 id="t-tmp">${esc(titulo)}</h2>
+          <button type="button" class="btn fantasma icone" data-fechar aria-label="Fechar"><i data-ic="x"></i></button></div>
+        <p style="margin-top:0">Envie estes dados para <b>${esc(u.nome)}</b>. A senha é temporária: no primeiro acesso, o sistema pede uma senha nova.</p>
+        <p style="margin:.3em 0 0"><span class="suave">Endereço:</span> <b>${esc(location.origin)}</b><br><span class="suave">Login:</span> <b>${esc(u.login)}</b></p>
+        <div class="senha-gerada"><code>${esc(senha)}</code><button type="button" class="btn sec peq" data-copiar>${ic('copiar')} Copiar acesso</button></div>
+        <p class="dica">Por segurança, esta senha não aparece de novo. Se perder, use “Redefinir senha”.</p>
+        <div class="rodape-modal"><button type="button" class="btn" data-fechar>Pronto</button></div>
+      </div>`, { estreito: true });
+    $('[data-copiar]', modal).addEventListener('click', async () => {
+      const txt = `Seu acesso ao Vértice\nEndereço: ${location.origin}\nLogin: ${u.login}\nSenha temporária: ${senha}`;
+      try { await navigator.clipboard.writeText(txt); toast('Acesso copiado.'); } catch { toast('Não foi possível copiar. Selecione e copie a senha.', { erro: true }); }
+    });
+  }
+
+  function formUsuario(u = null) {
+    const { modal, fechar } = abrirModal(`
+      <form class="modal" role="dialog" aria-modal="true" aria-labelledby="t-usr" novalidate autocomplete="off">
+        <div class="cab-modal"><h2 id="t-usr">${u ? 'Editar usuário' : 'Novo usuário'}</h2>
+          <button type="button" class="btn fantasma icone" data-fechar aria-label="Fechar"><i data-ic="x"></i></button></div>
+        <div class="grade-form">
+          <div class="inteiro"><label class="rotulo" for="u-nome">Nome</label><input type="text" id="u-nome" maxlength="120" value="${esc(u?.nome || '')}" required></div>
+          <div class="inteiro"><label class="rotulo" for="u-login">Login <small>(pode ser o e-mail)</small></label>
+            <input type="text" id="u-login" maxlength="80" autocapitalize="none" spellcheck="false" value="${esc(u?.login || '')}" ${u ? 'disabled' : 'required'}></div>
+          <fieldset class="inteiro pilulas"${u && u.id === eu.id ? ' disabled' : ''}>
+            <legend class="rotulo" style="padding:0;margin-bottom:.45em">Perfil</legend>
+            <label><input type="radio" name="perfil" value="usuario" ${u?.perfil === 'admin' ? '' : 'checked'}><span>Usuário</span></label>
+            <label><input type="radio" name="perfil" value="admin" ${u?.perfil === 'admin' ? 'checked' : ''}><span>Administrador</span></label>
+          </fieldset>
+          <p class="inteiro dica" style="margin:0">Administradores criam, bloqueiam e excluem contas. Ninguém, nem o administrador, vê os lançamentos de outra pessoa pelo sistema.</p>
+        </div>
+        <p class="erro-campo" id="u-erro" role="alert"></p>
+        <div class="rodape-modal"><button type="button" class="btn sec" data-fechar>Cancelar</button>
+          <button class="btn">${ic('check')} ${u ? 'Salvar' : 'Criar usuário'}</button></div>
+      </form>`, { estreito: true });
+    modal.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const nome = $('#u-nome', modal).value.trim();
+      const perfil = $('input[name=perfil]:checked', modal).value;
+      try {
+        if (u) {
+          await api('PUT', `/api/admin/usuarios/${u.id}`, { nome, perfil });
+          if (u.id === eu.id) eu.nome = nome;
+          fechar(); toast('Usuário atualizado.'); render();
+        } else {
+          const login = $('#u-login', modal).value.trim();
+          const r = await api('POST', '/api/admin/usuarios', { nome, login, perfil });
+          fechar(); renderUsuarios();
+          mostrarSenha('Usuário criado', { nome, login: r.login }, r.senhaTemporaria);
+        }
+      } catch (er) { $('#u-erro', modal).textContent = er.message; }
+    });
+  }
+
+  async function acaoUsuario(acao, id) {
+    const u = usuarios.find((x) => x.id === id);
+    if (!u) return;
+    try {
+      if (acao === 'editar') return formUsuario(u);
+      if (acao === 'senha') {
+        const ok = await confirmar({ titulo: 'Redefinir senha?', botao: 'Gerar senha temporária',
+          texto: `<b>${esc(u.nome)}</b> sai de todos os dispositivos e só entra de novo com a senha temporária que vamos gerar agora.` });
+        if (!ok) return;
+        const r = await api('POST', `/api/admin/usuarios/${id}/senha`, {});
+        renderUsuarios();
+        return mostrarSenha('Senha redefinida', u, r.senhaTemporaria);
+      }
+      if (acao === 'bloquear' || acao === 'desbloquear') {
+        const bloquear = acao === 'bloquear';
+        const ok = await confirmar({ titulo: bloquear ? 'Bloquear acesso?' : 'Desbloquear acesso?', perigo: bloquear,
+          botao: bloquear ? 'Bloquear' : 'Desbloquear',
+          texto: bloquear ? `<b>${esc(u.nome)}</b> sai imediatamente e não consegue mais entrar. Os dados dele ficam guardados e voltam se você desbloquear.`
+            : `<b>${esc(u.nome)}</b> volta a entrar com a senha que já tinha.` });
+        if (!ok) return;
+        await api('PUT', `/api/admin/usuarios/${id}`, { ativo: !bloquear });
+        toast(bloquear ? 'Usuário bloqueado.' : 'Usuário desbloqueado.');
+        return renderUsuarios();
+      }
+      if (acao === 'excluir') {
+        const ok = await confirmar({ titulo: 'Excluir usuário?', perigo: true, botao: 'Excluir definitivamente', palavra: u.login,
+          texto: `A conta de <b>${esc(u.nome)}</b> e <b>todos os lançamentos dela</b> serão apagados. Isso não pode ser desfeito. Se quiser só impedir o acesso, use “Bloquear”.` });
+        if (!ok) return;
+        await api('DELETE', `/api/admin/usuarios/${id}`, { confirmar: u.login });
+        toast('Usuário excluído.');
+        return renderUsuarios();
+      }
+    } catch (e) { toast(e.message, { erro: true }); }
   }
 
   // ---------- eventos ----------
@@ -587,7 +786,10 @@
     if (!alvo) return;
     if (alvo.matches('[data-novo]')) return abrirFormulario();
     if (alvo.matches('[data-exportar]')) return exportar();
-    if (alvo.matches('[data-migrar]')) return migrar();
+    if (alvo.matches('[data-sair]')) return sair();
+    if (alvo.matches('[data-trocar-senha]')) return trocarSenha();
+    if (alvo.matches('[data-novo-usuario]')) return formUsuario();
+    if (alvo.dataset.usr) return acaoUsuario(alvo.dataset.usr, Number(alvo.dataset.uid));
     if (alvo.matches('[data-limpar-filtro]')) { est.filtro = 'todos'; est.busca = ''; $('#busca').value = ''; return render(); }
     if (alvo.dataset.filtro) { est.filtro = est.filtro === alvo.dataset.filtro && alvo.dataset.filtro !== 'todos' ? 'todos' : alvo.dataset.filtro; return render(); }
     if (alvo.dataset.abrir) {
@@ -618,10 +820,12 @@
   $('#exportar').addEventListener('click', exportar);
   $('#arquivo-importar').addEventListener('change', (e) => { const a = e.target.files[0]; e.target.value = ''; if (a) importar(a); });
   $('#csv-ano').addEventListener('click', () => baixar(`vertice-${est.ano}.csv`, N.csv(dados.lancamentos, est.ano), 'text/csv;charset=utf-8'));
-  $('#form-perfil').addEventListener('submit', (e) => {
+  $('#form-perfil').addEventListener('submit', async (e) => {
     e.preventDefault();
-    dados.perfil.nome = $('#perfil-nome').value.trim().slice(0, 60);
-    salvar(); toast('Perfil salvo.');
+    const nome = $('#perfil-nome').value.trim().slice(0, 120);
+    if (!nome) return toast('Informe seu nome.', { erro: true });
+    try { await api('PUT', '/api/eu', { nome }); eu.nome = nome; render(); toast('Nome atualizado.'); }
+    catch (er) { toast(er.message, { erro: true }); }
   });
   $('#apagar-tudo').addEventListener('click', async () => {
     const ok = await confirmar({
@@ -636,17 +840,36 @@
   });
 
   document.addEventListener('keydown', (e) => {
-    if (e.ctrlKey || e.metaKey || e.altKey || $('.fundo-modal')) return;
+    if (!eu || e.ctrlKey || e.metaKey || e.altKey || $('.fundo-modal')) return;
     if (e.target.closest('input, select, textarea, [contenteditable]')) return;
     if (e.key === 'n' || e.key === 'N') { e.preventDefault(); abrirFormulario(); }
-    else if (e.key === 'ArrowLeft' && est.secao !== 'ajustes') mover(-1);
-    else if (e.key === 'ArrowRight' && est.secao !== 'ajustes') mover(1);
+    else if (e.key === 'ArrowLeft' && ['mes', 'ano'].includes(est.secao)) mover(-1);
+    else if (e.key === 'ArrowRight' && ['mes', 'ano'].includes(est.secao)) mover(1);
     else if (e.key === '/' && est.secao === 'mes') { e.preventDefault(); $('#busca').focus(); }
   });
 
   window.addEventListener('hashchange', lerHash);
-  window.addEventListener('storage', (e) => { if (e.key === CHAVE) location.reload(); });
-  lerHash();
+  window.addEventListener('online', () => { if (sinc.estado === 'erro') sincronizar(); });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') atualizarDoServidor(); });
+  window.addEventListener('beforeunload', (e) => { if (sinc.ocupado || sinc.estado === 'erro') e.preventDefault(); });
+
+  (async function iniciar() {
+    try {
+      const [usuario, d] = await Promise.all([api('GET', '/api/eu'), api('GET', '/api/dados')]);
+      eu = usuario; rev = d.rev; dados.lancamentos = d.lancamentos;
+    } catch (e) {
+      $('#carregando').innerHTML = `<div>${ic('alerta')}<h3>Não foi possível carregar seus dados</h3><p>${esc(e.message)}</p>
+        <button type="button" class="btn" id="tentar">Tentar de novo</button></div>`;
+      $('#tentar').addEventListener('click', () => location.reload());
+      return;
+    }
+    $('#carregando').remove();
+    $('#link-admin').hidden = eu.perfil !== 'admin';
+    $('#grupo-admin').hidden = eu.perfil !== 'admin';
+    marcarSinc('ok');
+    lerHash();
+    if (eu.trocarSenha) trocarSenha({ obrigatoria: true });
+  })();
 
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
     navigator.serviceWorker.register('sw.js').catch(() => {});

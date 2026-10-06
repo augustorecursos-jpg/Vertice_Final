@@ -1,0 +1,31 @@
+# Blueprint do Render (render.com → New → Blueprint → este repositório).
+# Plano Starter + disco persistente: usuários e lançamentos sobrevivem a reinícios e novos deploys.
+# O Render faz snapshot diário do disco.
+services:
+  - type: web
+    name: vertice
+    runtime: node
+    plan: starter
+    region: virginia
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /healthz
+    disk:
+      name: dados
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATA_DIR
+        value: /var/data
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: ADMIN_LOGIN
+        value: admin
+      - key: ADMIN_NOME
+        value: Augusto
+      - key: ADMIN_PASSWORD
+        sync: false

@@ -1,65 +1,85 @@
 # Vértice · Gestão financeira
 
 Aplicativo web de finanças pessoais com a identidade visual da **AR Consultoria**: marinho, azul e ciano, fonte Montserrat.
-É um site estático, sem servidor e sem banco de dados. Os dados ficam no navegador de quem usa (`localStorage`), e o próprio app oferece backup.
+Cada pessoa tem login próprio e vê só os próprios lançamentos. **Só o administrador cria, bloqueia, redefine a senha e exclui contas.** Não existe cadastro público.
 
-## O que mudou em relação à versão anterior
+## Contas e administração
 
-**Correções**
-- O lançamento entra na data escolhida no formulário. O formulário abre no mês que está na tela, e quando a data cai em outro mês o app avisa e oferece "Ver".
-- Todos os valores são guardados em **centavos**. Parcelas fecham o total exato: R$ 100 em 3 parcelas vira 33,33 + 33,33 + 33,34.
-- "Todo mês" não para mais em dezembro. Você escolhe quantos meses (padrão 12) e a série atravessa o ano.
-- Recorrências e parcelamentos formam uma **série**. Editar ou excluir pergunta: só este, este e os próximos, ou toda a série.
-- Os textos digitados são escapados antes de ir para o HTML, então uma descrição com `<` não quebra a tela nem executa código.
-- O campo de valor aceita o formato brasileiro ("1.500,50", "R$ 1.500", "1500,5").
-- Os IDs usam `crypto.randomUUID()`, então não colidem.
-- Quando falta um campo, o formulário mostra o erro ao lado dele.
+| Ação do administrador | O que acontece |
+|---|---|
+| **Novo usuário** | Gera uma senha temporária, mostrada uma única vez, com um botão para copiar o acesso e enviar. No primeiro login, a pessoa é obrigada a criar a própria senha. |
+| **Bloquear** | A pessoa sai na hora, mesmo com o app aberto, e não consegue entrar de novo. Os dados ficam guardados. |
+| **Desbloquear** | Volta a entrar com a senha que já tinha. |
+| **Redefinir senha** | Desconecta a pessoa de todos os dispositivos e gera uma nova senha temporária. |
+| **Excluir** | Apaga a conta e todos os lançamentos dela. Exige digitar o login para confirmar. |
+| **Perfil** | Usuário ou Administrador. Pode haver mais de um admin. |
 
-**Segurança e privacidade**
-- Saiu o login falso. Ele guardava senha, CPF e telefone em texto puro no navegador e não protegia nada. O app pede só um nome para a saudação.
-- Backup em JSON (baixar e restaurar, juntando ou substituindo os dados) e exportação de CSV do ano para Excel e Planilhas.
-- O app avisa quando o último backup tem mais de 30 dias.
-- "Apagar tudo" fica em Ajustes, exige digitar **APAGAR** e pode ser desfeito na hora.
-- Os dados do Vértice antigo (`vertice_stable_*`) são detectados no mesmo navegador e importados com um clique.
+Regras de proteção:
+- O admin não consegue bloquear, excluir ou rebaixar a própria conta.
+- Sempre sobra pelo menos um administrador ativo.
 
-**UX**
-- **Vencimento** em cada lançamento. Atrasados e os que vencem em até 3 dias aparecem destacados, e um aviso no topo soma os atrasados de todos os meses.
-- **Cards de resumo:** o saldo previsto do mês ganha destaque (o saldo realizado aparece embaixo), e "Falta pagar" vem com uma barra de progresso.
-- **Status por tipo:** despesas ficam "Pago", receitas "Recebido", investimentos "Aplicado" e poupança "Guardado".
-- **Lista:** filtros (em aberto, concluídos, receitas, despesas, investimentos, atrasados), busca e ordenação.
-- **Desfazer:** excluir mostra um aviso com o botão "Desfazer" em vez de pedir confirmação antes.
-- **Navegação:** setas ‹ › para trocar o mês, botão "Hoje" e atalhos de teclado (`N`, `←`/`→`, `/`).
-- **Visão anual:** gráfico de entradas × saídas, tabela com a primeira coluna fixa, categorias que abrem por descrição, saldo do mês e acumulado. Clicar em um mês abre os lançamentos dele.
-- **Celular:** barra de navegação inferior, botão flutuante "+" e lista adaptada.
-- **App instalável (PWA)**, com uso offline.
-- **Acessibilidade:** labels ligados aos campos, botões de verdade (marcar como pago, ações) com `aria-label`, foco visível e contraste melhor.
+**Privacidade:** o administrador gerencia contas, mas o sistema não mostra os lançamentos de ninguém. Nenhuma tela ou rota da API faz isso. A tela "Atividade recente" registra entradas e ações administrativas, sem valores financeiros.
+
+**Segurança:**
+- Senhas guardadas com scrypt e sessão em cookie `httpOnly` assinado.
+- Bloqueio de login após 8 tentativas erradas por IP.
+- Escritas na API só aceitam JSON (proteção contra CSRF).
+- Cabeçalhos de segurança, com CSP restritiva.
+
+## O app
+
+- **Lançamentos:** cada lançamento tem vencimento, e os atrasados e próximos de vencer ficam destacados. Tem recorrência mensal e parcelamento (o valor é guardado em centavos, então as parcelas fecham o total exato). Séries são editadas ou excluídas só no mês, dali em diante ou inteiras.
+- **Mês:** saldo previsto e realizado, falta pagar, receitas e investimentos. Há filtros, busca e "Desfazer".
+- **Visão anual:** gráfico de entradas × saídas, tabela por categoria com detalhe e saldo acumulado.
+- **Sincronização:** os dados ficam no servidor e o mesmo login funciona no celular e no computador. Se duas telas alterarem ao mesmo tempo, a segunda recebe a versão mais recente em vez de sobrescrever.
+- **Seus dados:** cópia em JSON, CSV do ano e importação, que também aceita arquivos do Vértice antigo.
+- **Celular:** layout responsivo e instalável (PWA).
+
+## Rodar localmente
+
+Requer Node.js 22.13 ou superior (o SQLite já vem embutido no Node).
+
+```bash
+npm install
+npm start          # http://localhost:3000
+npm test           # testes das regras e da API
+```
+
+No primeiro start, o servidor cria o administrador inicial. Localmente o acesso é `admin` / `vertice-admin`, e o sistema pede uma senha nova no primeiro acesso.
+Os dados ficam em `data/vertice.db`, ou na pasta definida em `DATA_DIR`.
+
+## Publicar no Render
+
+1. No Render: **New → Blueprint** e escolha este repositório. Ele lê o `render.yaml`.
+2. Quando pedir, preencha **ADMIN_PASSWORD** com a senha do seu administrador (login `admin`, que dá para trocar em `ADMIN_LOGIN`).
+3. Pronto. Acesse o endereço gerado, entre como admin e crie os usuários em **Usuários**.
+
+O blueprint usa o plano **Starter com disco persistente de 1 GB**, porque no plano grátis o disco é apagado a cada reinício.
+O Render faz um snapshot diário do disco.
+
+Variáveis de ambiente:
+
+| Variável | Uso |
+|---|---|
+| `ADMIN_PASSWORD` | Senha do primeiro administrador. É obrigatória em produção e só é usada quando o banco está vazio. |
+| `ADMIN_LOGIN`, `ADMIN_NOME` | Login e nome do primeiro administrador. |
+| `SESSION_SECRET` | Chave das sessões. O blueprint gera uma sozinho. |
+| `DATA_DIR` | Pasta do banco SQLite (no Render, o disco montado em `/var/data`). |
 
 ## Estrutura
 
 ```
-index.html            Telas (Mês, Visão anual, Backup e ajustes) e modelo do formulário
-css/estilo.css        Identidade visual AR Consultoria (variáveis em :root)
-js/nucleo.js          Regras de negócio sem DOM: valores, séries, resumos, backup, migração, CSV
-js/app.js             Interface: renderização, modais, eventos
-sw.js                 Cache offline
-manifest.webmanifest  Instalação como app
-fonts/                Montserrat (licença OFL)
-test/                 Testes das regras de negócio
+server.js            API: login, sessão, dados do usuário, administração de contas
+db.js                SQLite (usuarios, carteiras, auditoria) e senhas
+public/
+  index.html         App (Mês, Visão anual, Minha conta, Usuários)
+  entrar.html        Tela de login
+  css/estilo.css     Identidade visual AR Consultoria (variáveis em :root)
+  js/nucleo.js       Regras de negócio, usadas no navegador e no servidor
+  js/app.js          Interface
+  js/entrar.js       Login
+  sw.js              Cache dos arquivos estáticos
+test/                Testes (node --test)
+render.yaml          Blueprint do Render
+Dockerfile           Alternativa para outras hospedagens
 ```
-
-## Como rodar
-
-Abra o `index.html` direto no navegador, ou sirva a pasta para habilitar o modo offline e a instalação:
-
-```bash
-npm start      # http://localhost:8080
-npm test       # testes de nucleo.js (Node 18+)
-```
-
-Para publicar, qualquer hospedagem estática funciona: GitHub Pages, Netlify, Vercel ou Render Static Site.
-Ao publicar uma mudança, aumente a versão `CACHE` em `sw.js` para os usuários receberem os arquivos novos.
-
-## Próximos passos possíveis
-
-- Sincronização entre dispositivos com login real (Supabase ou Firebase Auth). Os dados já estão num formato versionado (`versao: 1`), pronto para isso.
-- Categorias personalizadas e orçamento por categoria.

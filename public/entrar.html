@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#17397d">
+  <meta name="robots" content="noindex">
+  <title>Entrar · Vértice</title>
+  <link rel="icon" href="img/icone.svg" type="image/svg+xml">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="css/estilo.css">
+</head>
+<body>
+<div class="login">
+  <section class="marca-lado">
+    <div class="logo-cartao"><img src="img/icone.svg" alt=""><div><b>Vértice</b><small>Gestão financeira</small></div></div>
+    <h1>Suas finanças no <em>ponto mais alto</em> de clareza.</h1>
+    <p>Contas do mês, vencimentos, parcelas e a visão do ano inteiro em um só lugar.</p>
+    <ul class="recursos">
+      <li><span class="bolha"><i data-ic="calendario"></i></span><div><b>Vencimentos em dia</b><small>Atrasados e próximos vencimentos sempre à vista</small></div></li>
+      <li><span class="bolha"><i data-ic="repetir"></i></span><div><b>Parcelas e recorrências</b><small>Lance uma vez e o Vértice distribui pelos meses</small></div></li>
+      <li><span class="bolha"><i data-ic="grafico"></i></span><div><b>Visão anual</b><small>Entradas, saídas e saldo acumulado mês a mês</small></div></li>
+    </ul>
+  </section>
+  <section class="form-lado">
+    <div class="caixa">
+      <h2>Entrar</h2>
+      <p class="suave">Use o acesso que você recebeu do administrador.</p>
+      <form id="form-login" novalidate>
+        <div>
+          <label class="rotulo" for="login">Usuário ou e-mail</label>
+          <input type="text" id="login" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus>
+        </div>
+        <div>
+          <label class="rotulo" for="senha">Senha</label>
+          <input type="password" id="senha" autocomplete="current-password" required>
+        </div>
+        <p class="erro" id="erro" role="alert"></p>
+        <button class="btn" id="entrar">Entrar</button>
+      </form>
+      <p class="rodape-login">Acesso restrito. Contas são criadas pelo administrador.<br>Uma solução <b>AR Consultoria</b></p>
+    </div>
+  </section>
+</div>
+<script src="js/entrar.js"></script>
+</body>
+</html>

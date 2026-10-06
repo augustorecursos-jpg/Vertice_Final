@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const N = require('../js/nucleo.js');
+const N = require('../public/js/nucleo.js');
 
 let seq = 0;
 const ids = () => `id${++seq}`;

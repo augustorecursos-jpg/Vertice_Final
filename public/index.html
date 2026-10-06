@@ -24,11 +24,14 @@
       <a href="#mes" data-secao="mes"><i data-ic="painel"></i> <span>Mês</span> <span class="cont" id="cont-atrasados" hidden></span></a>
       <a href="#ano" data-secao="ano"><i data-ic="grafico"></i> <span>Visão anual</span></a>
       <div class="grupo">Conta</div>
-      <a href="#ajustes" data-secao="ajustes"><i data-ic="ajustes"></i> <span>Backup e ajustes</span></a>
+      <a href="#ajustes" data-secao="ajustes"><i data-ic="ajustes"></i> <span>Minha conta</span></a>
+      <div class="grupo" id="grupo-admin" hidden>Administração</div>
+      <a href="#usuarios" data-secao="usuarios" id="link-admin" hidden><i data-ic="usuarios"></i> <span>Usuários</span></a>
     </nav>
     <div class="cartao-usuario">
       <span class="av" id="av-usuario">V</span>
-      <div><b id="nome-usuario">Você</b><small>Dados neste dispositivo</small></div>
+      <div><b id="nome-usuario">Você</b><small class="sinc salvando" id="sinc">Carregando…</small></div>
+      <button type="button" data-sair title="Sair" aria-label="Sair"><i data-ic="sair"></i></button>
     </div>
     <div class="assinatura">Uma solução <b>AR Consultoria</b></div>
   </aside>
@@ -49,6 +52,7 @@
     </header>
 
     <main class="conteudo" id="conteudo">
+      <div class="carregando" id="carregando"><div><div class="giro"></div><p>Carregando seus dados…</p></div></div>
       <!-- ================= MÊS ================= -->
       <section data-secao="mes" hidden>
         <div id="aviso-atrasados"></div>
@@ -102,33 +106,40 @@
 
       <!-- ================= AJUSTES ================= -->
       <section data-secao="ajustes" hidden>
-        <div id="aviso-migracao"></div>
         <div class="grade-ajustes">
           <div class="cartao">
-            <div class="cartao-cab"><h2><span class="bolha"><i data-ic="usuario"></i></span> Seu perfil</h2></div>
+            <div class="cartao-cab">
+              <div>
+                <h2><span class="bolha"><i data-ic="usuario"></i></span> Minha conta</h2>
+                <p>Login: <b id="perfil-login"></b></p>
+              </div>
+            </div>
             <form id="form-perfil" class="linha" autocomplete="off">
               <div style="flex:1 1 220px">
-                <label class="rotulo" for="perfil-nome">Como quer ser chamado?</label>
-                <input type="text" id="perfil-nome" maxlength="60" placeholder="Seu nome">
+                <label class="rotulo" for="perfil-nome">Seu nome</label>
+                <input type="text" id="perfil-nome" maxlength="120" placeholder="Seu nome">
               </div>
               <button class="btn" style="align-self:flex-end">Salvar</button>
             </form>
-            <p class="dica">Usado só para a saudação. Não pedimos e-mail, CPF nem senha: os dados ficam neste navegador.</p>
+            <div class="linha" style="margin-top:1em">
+              <button type="button" class="btn sec" data-trocar-senha><i data-ic="chave"></i> Trocar senha</button>
+              <button type="button" class="btn fantasma" data-sair><i data-ic="sair"></i> Sair</button>
+            </div>
           </div>
 
           <div class="cartao">
             <div class="cartao-cab">
               <div>
-                <h2><span class="bolha ciano"><i data-ic="escudo"></i></span> Backup</h2>
+                <h2><span class="bolha ciano"><i data-ic="escudo"></i></span> Seus dados</h2>
                 <p id="info-backup"></p>
               </div>
             </div>
             <div class="linha">
-              <button type="button" class="btn" id="exportar"><i data-ic="baixar"></i> Baixar backup (.json)</button>
-              <label class="btn sec" for="arquivo-importar"><i data-ic="enviar"></i> Restaurar backup</label>
+              <button type="button" class="btn" id="exportar"><i data-ic="baixar"></i> Baixar cópia (.json)</button>
+              <label class="btn sec" for="arquivo-importar"><i data-ic="enviar"></i> Importar arquivo</label>
               <input type="file" id="arquivo-importar" accept=".json,application/json" hidden>
             </div>
-            <p class="dica">O restaurar também aceita arquivos exportados do Vértice antigo.</p>
+            <p class="dica">A importação aceita cópias do Vértice e arquivos exportados do Vértice antigo.</p>
           </div>
 
           <div class="cartao">
@@ -137,19 +148,44 @@
               <li><span class="bolha"><i data-ic="calendario"></i></span><div><b>Vencimentos.</b> Cada lançamento tem uma data. Atrasados e os que vencem em até 3 dias ficam destacados.</div></li>
               <li><span class="bolha ciano"><i data-ic="repetir"></i></span><div><b>Séries.</b> Recorrências e parcelamentos podem ser editados ou excluídos só no mês, dali em diante ou inteiros.</div></li>
               <li><span class="bolha verde"><i data-ic="check"></i></span><div><b>Status.</b> Marque despesas como pagas, receitas como recebidas e investimentos como aplicados. O saldo realizado acompanha.</div></li>
-              <li><span class="bolha indigo"><i data-ic="teclado"></i></span><div><b>Atalhos.</b> <kbd>N</kbd> novo lançamento, <kbd>←</kbd> <kbd>→</kbd> troca o mês, <kbd>/</kbd> busca.</div></li>
+              <li><span class="bolha indigo"><i data-ic="escudo"></i></span><div><b>Privacidade.</b> Seus lançamentos ficam na sua conta, salvos no servidor. Ninguém mais vê, nem o administrador.</div></li>
+              <li><span class="bolha"><i data-ic="teclado"></i></span><div><b>Atalhos.</b> <kbd>N</kbd> novo lançamento, <kbd>←</kbd> <kbd>→</kbd> troca o mês, <kbd>/</kbd> busca.</div></li>
             </ul>
           </div>
 
           <div class="cartao perigo">
             <div class="cartao-cab">
               <div>
-                <h2><span class="bolha vermelho"><i data-ic="lixo"></i></span> Apagar todos os dados</h2>
-                <p>Remove todos os lançamentos de todos os anos deste navegador. Baixe um backup antes.</p>
+                <h2><span class="bolha vermelho"><i data-ic="lixo"></i></span> Apagar meus lançamentos</h2>
+                <p>Remove todos os seus lançamentos, de todos os anos. Baixe uma cópia antes.</p>
               </div>
             </div>
             <button type="button" class="btn perigo" id="apagar-tudo"><i data-ic="lixo"></i> Apagar tudo…</button>
           </div>
+        </div>
+      </section>
+
+      <!-- ================= USUÁRIOS (admin) ================= -->
+      <section data-secao="usuarios" hidden>
+        <div class="cartao">
+          <div class="cartao-cab">
+            <div>
+              <h2><span class="bolha"><i data-ic="usuarios"></i></span> Usuários</h2>
+              <p id="resumo-usuarios">Só administradores criam contas. Não existe cadastro público.</p>
+            </div>
+            <button type="button" class="btn" data-novo-usuario><i data-ic="mais"></i> Novo usuário</button>
+          </div>
+          <div class="tabela-wrap"><table class="t simples" id="tabela-usuarios"></table></div>
+          <p class="dica">Bloquear tira o acesso na hora e guarda os dados. Excluir apaga a conta e os lançamentos. Redefinir gera uma senha temporária e desconecta a pessoa.</p>
+        </div>
+        <div class="cartao">
+          <div class="cartao-cab">
+            <div>
+              <h2><span class="bolha ciano"><i data-ic="relogio"></i></span> Atividade recente</h2>
+              <p>Entradas e ações administrativas. Valores financeiros não são registrados.</p>
+            </div>
+          </div>
+          <ul class="lista-auditoria" id="auditoria"></ul>
         </div>
       </section>
     </main>
