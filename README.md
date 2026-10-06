@@ -47,6 +47,12 @@ Regras de proteção:
 - **Planejamentos:** tabelas livres (ex.: "Plano apartamento" com uma coluna por ano), com total por coluna, total final, meta opcional, CSV e duplicação.
 - **Celular:** layout responsivo e instalável (PWA).
 
+## Guia do cliente (e-book)
+
+- **Web:** `/guia` (público, sem login), com link na tela de entrada e em Minha conta. É o link para enviar a um cliente novo junto com o acesso.
+- **PDF:** `public/guia/Guia-Vertice.pdf` (12 páginas A4), também em `/guia/Guia-Vertice.pdf`.
+- **Atualizar:** edite `public/guia.html` e gere o PDF de novo com `LANG=pt_BR.UTF-8 node scripts/gerar-guia-pdf.js`. O script precisa do Playwright e avisa se alguma página passar do tamanho da folha.
+
 ## Rodar localmente
 
 Requer Node.js 22.13 ou superior (o SQLite já vem embutido no Node).

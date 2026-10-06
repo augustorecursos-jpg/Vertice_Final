@@ -169,6 +169,7 @@ app.get('/healthz', (req, res) => res.send('ok'));
 const pagina = (arquivo) => (req, res) => { res.setHeader('Cache-Control', 'no-cache'); res.sendFile(path.join(PUBLICO, arquivo)); };
 app.get('/', (req, res, next) => (usuarioDaSessao(req) ? pagina('index.html')(req, res, next) : res.redirect('/entrar')));
 app.get('/index.html', (req, res) => res.redirect('/'));
+app.get('/guia', pagina('guia.html')); // guia do cliente: público, para enviar antes do primeiro acesso
 app.get('/entrar', (req, res, next) => (usuarioDaSessao(req) ? res.redirect('/') : pagina('entrar.html')(req, res, next)));
 app.use(express.static(PUBLICO, { index: false, extensions: false, setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache') }));
 
