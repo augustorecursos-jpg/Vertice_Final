@@ -155,3 +155,36 @@ test('observações são gravadas, editadas na série e limitadas', () => {
   assert.equal(N.limpar({ ...ls[0], obs: 'x'.repeat(5000) }).obs.length, N.MAX_OBS);
   assert.equal(N.limpar({ ...ls[0], obs: undefined }).obs, '');
 });
+
+test('planejamento: totais por coluna, por linha, total final e meta', () => {
+  const p = N.novoPlano({ exemplo: true }, ids);
+  const t = N.totaisPlano(p);
+  const [c1, c2] = p.colunas;
+  assert.equal(t.porColuna[c1.id], 5400000);
+  assert.equal(t.porColuna[c2.id], 5400000);
+  assert.equal(t.total, 10800000);
+  assert.equal(t.porLinha[p.linhas[1].id], 6000000);
+  assert.equal(t.pctMeta, 36);
+  assert.equal(t.falta, 19200000);
+  assert.equal(N.totaisPlano({ ...p, meta: null }).pctMeta, null);
+});
+
+test('planejamento: limpeza descarta valores inválidos e colunas desconhecidas', () => {
+  const p = N.novoPlano({ exemplo: true }, ids);
+  const sujo = { ...p, titulo: '  Viagem   2027 ', meta: -5, linhas: [{ id: 'l1', nome: 'X', valores: { [p.colunas[0].id]: 10.5, naoExiste: 100, [p.colunas[1].id]: 300 } }] };
+  const l = N.limparPlano(sujo);
+  assert.equal(l.titulo, 'Viagem 2027');
+  assert.equal(l.meta, null);
+  assert.deepEqual(l.linhas[0].valores, { [p.colunas[1].id]: 300 });
+  assert.equal(N.limparPlano({ ...p, colunas: [p.colunas[0], p.colunas[0]] }), null);
+  assert.equal(N.limparPlano({ titulo: 'x' }), null);
+  assert.equal(N.limparPlano({ ...p, linhas: Array(101).fill({ nome: 'a', valores: {} }) }), null);
+});
+
+test('planejamento: CSV com totais', () => {
+  const p = N.novoPlano({ exemplo: true }, ids);
+  const linhas = N.csvPlano(p).replace('﻿', '').split('\r\n');
+  assert.equal(linhas[0], '"Plano apartamento";"1º ano";"2º ano";Total');
+  assert.equal(linhas[1], '"Poupança";18000,00;18000,00;36000,00');
+  assert.equal(linhas[4], 'TOTAL;54000,00;54000,00;108000,00');
+});

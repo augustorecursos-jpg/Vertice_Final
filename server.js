@@ -202,9 +202,14 @@ app.post('/api/eu/senha', exigirLogin, (req, res) => {
 });
 
 // ---------- dados financeiros (sempre do próprio usuário) ----------
+// carteiras.dados guarda { lancamentos, planos }. Versões antigas guardavam só a lista de lançamentos.
 function carteira(uid) {
   const c = db.prepare('SELECT dados, rev FROM carteiras WHERE usuario_id = ?').get(uid);
-  return c ? { rev: c.rev, lancamentos: JSON.parse(c.dados) } : { rev: 0, lancamentos: [] };
+  if (!c) return { rev: 0, lancamentos: [], planos: [] };
+  const d = JSON.parse(c.dados);
+  return Array.isArray(d)
+    ? { rev: c.rev, lancamentos: d, planos: [] }
+    : { rev: c.rev, lancamentos: d.lancamentos || [], planos: d.planos || [] };
 }
 
 app.get('/api/dados', exigirLogin, (req, res) => {
@@ -213,11 +218,16 @@ app.get('/api/dados', exigirLogin, (req, res) => {
 });
 
 app.put('/api/dados', exigirLogin, (req, res) => {
-  const { rev, lancamentos } = req.body || {};
-  if (!Number.isInteger(rev) || !Array.isArray(lancamentos)) return res.status(400).json({ erro: 'Formato inválido.' });
+  const { rev, lancamentos, planos } = req.body || {};
+  if (!Number.isInteger(rev) || !Array.isArray(lancamentos) || (planos !== undefined && !Array.isArray(planos))) {
+    return res.status(400).json({ erro: 'Formato inválido.' });
+  }
   if (lancamentos.length > MAX_LANCAMENTOS) return res.status(413).json({ erro: `Limite de ${MAX_LANCAMENTOS} lançamentos.` });
+  if (planos && planos.length > N.LIMITES_PLANO.planos) return res.status(413).json({ erro: `Limite de ${N.LIMITES_PLANO.planos} planejamentos.` });
   const limpos = lancamentos.map(N.limpar);
   if (limpos.some((l) => !l)) return res.status(400).json({ erro: 'Há lançamentos inválidos.' });
+  const planosLimpos = planos?.map(N.limparPlano);
+  if (planosLimpos?.some((p) => !p)) return res.status(400).json({ erro: 'Há planejamentos inválidos.' });
 
   const r = transacao(() => {
     const atual = carteira(req.usuario.id);
@@ -225,7 +235,7 @@ app.put('/api/dados', exigirLogin, (req, res) => {
     const nova = rev + 1;
     db.prepare(`INSERT INTO carteiras (usuario_id, dados, rev) VALUES (?, ?, ?)
       ON CONFLICT (usuario_id) DO UPDATE SET dados = excluded.dados, rev = excluded.rev, atualizado_em = datetime('now')`)
-      .run(req.usuario.id, JSON.stringify(limpos), nova);
+      .run(req.usuario.id, JSON.stringify({ lancamentos: limpos, planos: planosLimpos || atual.planos }), nova);
     return { rev: nova };
   });
   if (r.conflito) return res.status(409).json({ erro: 'Seus dados foram alterados em outro dispositivo.', ...r.conflito });

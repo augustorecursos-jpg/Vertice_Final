@@ -92,6 +92,34 @@ test('cada usuário só vê os próprios lançamentos', async () => {
   assert.ok(lista.every((u) => !('lancamentos' in u) && !('senha_hash' in u)));
 });
 
+test('planejamentos são salvos junto e validados', async () => {
+  const plano = { id: 'p1', titulo: 'Plano apartamento', meta: 30000000, colunas: [{ id: 'c1', nome: '1º ano' }], linhas: [{ id: 'l1', nome: 'PLR', valores: { c1: 3000000 } }] };
+  const r = await ana('PUT', '/api/dados', { rev: 1, lancamentos: [lanc('a1'), lanc('a2')], planos: [plano] });
+  assert.equal(r.status, 200);
+  const d = (await ana('GET', '/api/dados')).dados;
+  assert.equal(d.planos.length, 1);
+  assert.equal(d.planos[0].linhas[0].valores.c1, 3000000);
+  assert.equal(d.lancamentos.length, 2);
+  // Sem o campo planos, os planejamentos existentes são mantidos.
+  const r2 = await ana('PUT', '/api/dados', { rev: 2, lancamentos: [lanc('a1'), lanc('a2')] });
+  assert.equal(r2.dados.rev, 3);
+  assert.equal((await ana('GET', '/api/dados')).dados.planos.length, 1);
+  assert.equal((await ana('PUT', '/api/dados', { rev: 3, lancamentos: [], planos: [{ titulo: 'sem colunas' }] })).status, 400);
+  assert.equal((await admin('GET', '/api/dados')).dados.planos.length, 0);
+  // Volta ao estado esperado pelos próximos testes (rev 1 com dois lançamentos).
+  const { db } = require('../db');
+  db.prepare('UPDATE carteiras SET rev = 1 WHERE usuario_id = ?').run(idAna);
+});
+
+test('dados no formato antigo (só a lista) continuam legíveis', async () => {
+  const { db } = require('../db');
+  const antes = db.prepare('SELECT dados FROM carteiras WHERE usuario_id = ?').get(idAna).dados;
+  db.prepare('UPDATE carteiras SET dados = ? WHERE usuario_id = ?').run(JSON.stringify([lanc('velho')]), idAna);
+  const d = (await ana('GET', '/api/dados')).dados;
+  assert.deepEqual([d.lancamentos.length, d.planos.length], [1, 0]);
+  db.prepare('UPDATE carteiras SET dados = ? WHERE usuario_id = ?').run(antes, idAna);
+});
+
 test('gravação com revisão antiga recebe conflito com os dados atuais', async () => {
   const r = await ana('PUT', '/api/dados', { rev: 0, lancamentos: [] });
   assert.equal(r.status, 409);

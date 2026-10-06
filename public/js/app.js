@@ -39,6 +39,8 @@
     desce: '<path d="M17 7 7 17M17 17H7V7"/>',
     cofre: '<path d="M19 5c-1.5 0-2.8 1.4-3 2-3.5-1.5-11-.3-11 5 0 1.8 0 3 2 4.5V20h4v-2h3v2h4v-4c1-.5 1.7-1 2-2h2v-4h-2c0-1-.5-1.5-1-2V5z"/><path d="M2 9v1c0 1.1.9 2 2 2h1"/><path d="M16 11h.01"/>',
     parcela: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/>',
+    alvo: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
+    brilho: '<path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/>',
     nota: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
     cadeado: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
     destravar: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>',
@@ -67,7 +69,7 @@
 
   // ---------- servidor ----------
   let eu = null;                     // usuário logado
-  let dados = { lancamentos: [] };   // lançamentos do usuário
+  let dados = { lancamentos: [], planos: [] };   // lançamentos e planejamentos do usuário
   let rev = 0;                       // revisão dos dados no servidor
 
   async function api(metodo, url, corpo) {
@@ -100,11 +102,11 @@
       do {
         sinc.pendente = false;
         try {
-          rev = (await api('PUT', '/api/dados', { rev, lancamentos: dados.lancamentos })).rev;
+          rev = (await api('PUT', '/api/dados', { rev, lancamentos: dados.lancamentos, planos: dados.planos })).rev;
           marcarSinc('ok');
         } catch (e) {
           if (e.status === 409) {
-            rev = e.dados.rev; dados.lancamentos = e.dados.lancamentos;
+            rev = e.dados.rev; dados.lancamentos = e.dados.lancamentos; dados.planos = e.dados.planos || [];
             sinc.pendente = false; marcarSinc('ok'); render();
             toast('Seus dados mudaram em outro dispositivo. Carreguei a versão mais recente; confira a última alteração.', { erro: true, tempo: 9000 });
           } else if (e.status >= 400 && e.status < 500) {
@@ -120,10 +122,10 @@
   }
   /** Traz alterações feitas em outro dispositivo (ao voltar para a aba). */
   async function atualizarDoServidor() {
-    if (sinc.ocupado || sinc.estado !== 'ok' || $('.fundo-modal')) return;
+    if (sinc.ocupado || sinc.estado !== 'ok' || $('.fundo-modal') || document.activeElement?.closest('#planos')) return;
     try {
       const d = await api('GET', '/api/dados');
-      if (d.rev !== rev && !sinc.ocupado) { rev = d.rev; dados.lancamentos = d.lancamentos; render(); }
+      if (d.rev !== rev && !sinc.ocupado) { rev = d.rev; dados.lancamentos = d.lancamentos; dados.planos = d.planos || []; render(); }
     } catch { /* tenta de novo na próxima vez */ }
   }
 
@@ -365,8 +367,9 @@
     irPara(r.ano, r.mes);
   }
   function lerHash() {
-    const s = location.hash.replace('#', '');
-    est.secao = ['mes', 'ano', 'ajustes'].includes(s) || (s === 'usuarios' && eu?.perfil === 'admin') ? s : 'mes';
+    const [s, sub] = location.hash.replace('#', '').split('/');
+    est.secao = ['mes', 'ano', 'planos', 'ajustes'].includes(s) || (s === 'usuarios' && eu?.perfil === 'admin') ? s : 'mes';
+    est.plano = s === 'planos' && sub ? decodeURIComponent(sub) : null;
     render();
     window.scrollTo({ top: 0 });
   }
@@ -381,6 +384,7 @@
     if (est.secao === 'ano') renderAno();
     if (est.secao === 'ajustes') renderAjustes();
     if (est.secao === 'usuarios') renderUsuarios();
+    if (est.secao === 'planos') renderPlanos();
   }
 
   function atrasados() {
@@ -399,6 +403,7 @@
     const comPeriodo = ['mes', 'ano'].includes(est.secao);
     $('.topo .mes').hidden = !comPeriodo;
     $('#btn-hoje').hidden = !comPeriodo;
+    $('.topo').classList.toggle('sem-periodo', !comPeriodo);
     $('#rotulo-periodo').textContent = ano ? 'Ano de referência' : 'Mês de referência';
     $('#nome-mes').textContent = ano ? est.ano : `${MESES[est.mes]} ${est.ano}`;
     $('#competencia').value = `${est.ano}-${String(est.mes + 1).padStart(2, '0')}`;
@@ -612,6 +617,222 @@
     $('#perfil-login').textContent = eu.login;
     const n = dados.lancamentos.length;
     $('#info-backup').textContent = `${n} ${n === 1 ? 'lançamento salvo' : 'lançamentos salvos'} na sua conta. Baixe uma cópia quando quiser guardar ou levar para uma planilha.`;
+  }
+
+  // ---------- planejamentos ----------
+  const planoAtual = () => dados.planos.find((p) => p.id === est.plano);
+  const campoValor = (c) => (Number.isInteger(c) ? N.valorParaCampo(c) : '');
+
+  function renderPlanos() {
+    const raiz = $('#planos');
+    const p = planoAtual();
+    if (est.plano && !p) { location.hash = '#planos'; return; }
+    if (p) return renderEditorPlano(raiz, p);
+
+    const cab = `<div class="cartao-cab">
+        <div><h2><span class="bolha indigo"><i data-ic="alvo"></i></span> Planejamentos</h2>
+        <p>Monte tabelas para planejar uma compra, uma viagem ou um investimento. Os totais são calculados sozinhos.</p></div>
+        <div class="linha"><button type="button" class="btn sec" data-p="exemplo"><i data-ic="brilho"></i> Usar exemplo</button>
+        <button type="button" class="btn" data-p="novo"><i data-ic="mais"></i> Novo planejamento</button></div></div>`;
+    if (!dados.planos.length) {
+      raiz.innerHTML = `<div class="cartao">${cab}<div class="vazio">${ILUSTRA}<h3>Nenhum planejamento ainda</h3>
+        <p>Exemplo: “Plano apartamento”, com uma coluna por ano e uma linha para cada fonte (poupança, PLR, 13º).</p>
+        <div class="linha"><button type="button" class="btn" data-p="exemplo">Começar pelo exemplo</button></div></div></div>`;
+    } else {
+      const cards = dados.planos.slice().sort((a, b) => b.atualizadoEm - a.atualizadoEm).map((pl) => {
+        const t = N.totaisPlano(pl);
+        return `<a class="cartao-plano" href="#planos/${encodeURIComponent(pl.id)}">
+          <span class="tipo">${pl.linhas.length} ${pl.linhas.length === 1 ? 'item' : 'itens'} · ${pl.colunas.length} ${pl.colunas.length === 1 ? 'coluna' : 'colunas'}</span>
+          <b class="titulo">${esc(pl.titulo)}</b>
+          <span class="total">${moeda(t.total)}</span>
+          ${t.pctMeta != null ? `<span class="meta-linha"><span class="barra"><span style="width:${Math.min(100, t.pctMeta)}%"></span></span><small>${t.pctMeta}% da meta de ${moeda(pl.meta)}</small></span>` : '<small class="suave">Sem meta definida</small>'}
+        </a>`;
+      }).join('');
+      raiz.innerHTML = `<div class="cartao">${cab}<div class="grade-planos">${cards}</div></div>`;
+    }
+    hidratar(raiz);
+  }
+
+  function resumoMeta(p, t) {
+    if (!(p.meta > 0)) return '<span class="suave">Defina uma meta para acompanhar quanto falta.</span>';
+    return `<span class="barra"><span style="width:${Math.min(100, t.pctMeta)}%"></span></span>
+      <span><b>${t.pctMeta}%</b> da meta · ${t.falta ? `faltam <b>${moeda(t.falta)}</b>` : '<b>meta atingida</b>'}</span>`;
+  }
+
+  function renderEditorPlano(raiz, p) {
+    const t = N.totaisPlano(p);
+    const nCol = p.colunas.length;
+    raiz.innerHTML = `<div class="cartao editor-plano">
+      <div class="plano-topo">
+        <a href="#planos" class="btn fantasma peq"><i data-ic="esq"></i> Planejamentos</a>
+        <div class="linha">
+          <button type="button" class="btn sec peq" data-p="csv"><i data-ic="planilha"></i> CSV</button>
+          <button type="button" class="btn sec peq" data-p="duplicar"><i data-ic="copiar"></i> Duplicar</button>
+          <button type="button" class="btn perigo peq" data-p="excluir"><i data-ic="lixo"></i> Excluir</button>
+        </div>
+      </div>
+      <input type="text" class="titulo-plano" data-campo="titulo" maxlength="120" value="${esc(p.titulo)}" aria-label="Nome do planejamento" placeholder="Nome do planejamento">
+      <div class="meta-plano">
+        <div><label class="rotulo" for="plano-meta">Meta <small>(opcional)</small></label>
+          <div class="campo-valor"><span>R$</span><input type="text" id="plano-meta" data-campo="meta" inputmode="decimal" placeholder="0,00" value="${esc(campoValor(p.meta))}"></div></div>
+        <div class="resumo-meta" data-meta-resumo>${resumoMeta(p, t)}</div>
+      </div>
+      <div class="tabela-wrap"><table class="t plano">
+        <thead><tr>
+          <th scope="col">Item</th>
+          ${p.colunas.map((c, j) => `<th scope="col"><div class="cel-col"><input type="text" data-col-nome="${esc(c.id)}" data-r="-1" data-c="${j}" value="${esc(c.nome)}" maxlength="80" placeholder="Coluna" aria-label="Nome da coluna ${j + 1}">
+            ${nCol > 1 ? `<button type="button" class="rem" tabindex="-1" data-p="rem-col" data-id="${esc(c.id)}" title="Remover coluna" aria-label="Remover coluna ${esc(c.nome || j + 1)}">${ic('x')}</button>` : ''}</div></th>`).join('')}
+          <th scope="col" class="col-total">Total</th>
+          <th class="col-add">${nCol < N.LIMITES_PLANO.colunas ? `<button type="button" class="btn fantasma peq" data-p="add-col" title="Adicionar coluna">${ic('mais')} Coluna</button>` : ''}</th>
+        </tr></thead>
+        <tbody>${p.linhas.map((l, i) => `<tr>
+          <td><div class="cel-nome"><input type="text" data-lin-nome="${esc(l.id)}" data-r="${i}" data-c="-1" value="${esc(l.nome)}" maxlength="80" placeholder="Ex.: Poupança" aria-label="Nome da linha ${i + 1}">
+            <button type="button" class="rem" tabindex="-1" data-p="rem-lin" data-id="${esc(l.id)}" title="Remover linha" aria-label="Remover linha ${esc(l.nome || i + 1)}">${ic('x')}</button></div></td>
+          ${p.colunas.map((c, j) => `<td><input type="text" class="valor" inputmode="decimal" data-lin="${esc(l.id)}" data-col="${esc(c.id)}" data-r="${i}" data-c="${j}"
+            value="${esc(campoValor(l.valores[c.id]))}" placeholder="–" aria-label="${esc(l.nome || 'Linha ' + (i + 1))}, ${esc(c.nome || 'coluna ' + (j + 1))}"></td>`).join('')}
+          <td class="col-total" data-tot-l="${esc(l.id)}">${moeda(t.porLinha[l.id])}</td><td></td>
+        </tr>`).join('')}</tbody>
+        <tfoot>
+          <tr class="soma"><th scope="row">Total</th>${p.colunas.map((c) => `<td data-tot-c="${esc(c.id)}">${moeda(t.porColuna[c.id])}</td>`).join('')}<td class="col-total" data-tot-geral>${moeda(t.total)}</td><td></td></tr>
+          <tr class="final"><th scope="row">Total final</th><td colspan="${nCol + 1}" data-tot-final>${moeda(t.total)}</td><td></td></tr>
+        </tfoot>
+      </table></div>
+      ${p.linhas.length < N.LIMITES_PLANO.linhas ? `<button type="button" class="btn sec peq" data-p="add-lin" style="margin-top:.8em">${ic('mais')} Adicionar linha</button>` : ''}
+      <div style="margin-top:1.2em"><label class="rotulo" for="plano-obs">Observações <small>(opcional)</small></label>
+        <textarea id="plano-obs" data-campo="obs" rows="3" maxlength="1000" placeholder="Premissas, prazos, de onde vem cada valor…">${esc(p.obs || '')}</textarea></div>
+      <p class="dica">Valores aceitam o formato brasileiro (18.000,00). <kbd>Enter</kbd> desce para a linha de baixo. Salvo automaticamente.</p>
+    </div>`;
+    hidratar(raiz);
+  }
+
+  function atualizarTotaisPlano(p) {
+    const t = N.totaisPlano(p);
+    const raiz = $('#planos');
+    for (const l of p.linhas) { const el = $(`[data-tot-l="${CSS.escape(l.id)}"]`, raiz); if (el) el.textContent = moeda(t.porLinha[l.id]); }
+    for (const c of p.colunas) { const el = $(`[data-tot-c="${CSS.escape(c.id)}"]`, raiz); if (el) el.textContent = moeda(t.porColuna[c.id]); }
+    $('[data-tot-geral]', raiz).textContent = moeda(t.total);
+    $('[data-tot-final]', raiz).textContent = moeda(t.total);
+    $('[data-meta-resumo]', raiz).innerHTML = resumoMeta(p, t);
+  }
+
+  /** estrutural: redesenha a tabela (linhas/colunas mudaram); senão só atualiza os totais, mantendo o foco. */
+  function salvarPlano(p, estrutural = false) {
+    p.atualizadoEm = Date.now();
+    if (estrutural) render(); else atualizarTotaisPlano(p);
+    sincronizar();
+  }
+
+  function focarCelula(r, c) {
+    const el = $(`#planos input[data-r="${r}"][data-c="${c}"]`);
+    if (el) { el.focus(); el.select(); }
+    return !!el;
+  }
+
+  function acaoPlano(acao, id) {
+    if (acao === 'novo' || acao === 'exemplo') {
+      const p = N.novoPlano({ exemplo: acao === 'exemplo' });
+      dados.planos.push(p);
+      sincronizar();
+      location.hash = '#planos/' + encodeURIComponent(p.id);
+      if (acao === 'novo') setTimeout(() => $('#planos .titulo-plano')?.select(), 50);
+      return;
+    }
+    const p = planoAtual();
+    if (!p) return;
+    const antes = structuredClone(p);
+    const desfazer = () => { Object.assign(p, antes); salvarPlano(p, true); };
+    const temValores = (fn) => p.linhas.some((l) => Object.entries(l.valores).some(([k, v]) => fn(l, k) && v));
+    if (acao === 'add-lin') {
+      p.linhas.push({ id: N.novoId(), nome: '', valores: {} });
+      salvarPlano(p, true);
+      return focarCelula(p.linhas.length - 1, -1);
+    }
+    if (acao === 'add-col') {
+      p.colunas.push({ id: N.novoId(), nome: `${p.colunas.length + 1}º ano` });
+      salvarPlano(p, true);
+      return focarCelula(-1, p.colunas.length - 1);
+    }
+    if (acao === 'rem-lin') {
+      const l = p.linhas.find((x) => x.id === id);
+      p.linhas = p.linhas.filter((x) => x.id !== id);
+      if (!p.linhas.length) p.linhas.push({ id: N.novoId(), nome: '', valores: {} });
+      salvarPlano(p, true);
+      if (l && (l.nome || Object.keys(l.valores).length)) toast('Linha removida.', { acao: desfazer });
+      return;
+    }
+    if (acao === 'rem-col') {
+      const tinha = temValores((l, k) => k === id);
+      p.colunas = p.colunas.filter((c) => c.id !== id);
+      p.linhas.forEach((l) => { delete l.valores[id]; });
+      salvarPlano(p, true);
+      if (tinha) toast('Coluna removida.', { acao: desfazer });
+      return;
+    }
+    if (acao === 'csv') return baixar(`${p.titulo.replace(/[\\/:*?"<>|]+/g, '-') || 'planejamento'}.csv`, N.csvPlano(p), 'text/csv;charset=utf-8');
+    if (acao === 'duplicar') {
+      const copia = N.limparPlano({ ...structuredClone(p), id: N.novoId(), titulo: `${p.titulo} (cópia)`, criadoEm: Date.now(), atualizadoEm: Date.now() });
+      dados.planos.push(copia);
+      sincronizar();
+      location.hash = '#planos/' + encodeURIComponent(copia.id);
+      return toast('Planejamento duplicado.');
+    }
+    if (acao === 'excluir') {
+      const lista = dados.planos;
+      dados.planos = lista.filter((x) => x.id !== p.id);
+      sincronizar();
+      location.hash = '#planos';
+      toast(`“${p.titulo}” excluído.`, { acao: () => { dados.planos = lista; sincronizar(); location.hash = '#planos/' + encodeURIComponent(p.id); } });
+    }
+  }
+
+  function ligarPlanos() {
+    const raiz = $('#planos');
+    raiz.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-p]');
+      if (b) acaoPlano(b.dataset.p, b.dataset.id);
+    });
+    raiz.addEventListener('focusin', (e) => { if (e.target.matches('input.valor, #plano-meta')) e.target.select(); });
+    raiz.addEventListener('change', (e) => {
+      const p = planoAtual();
+      const el = e.target;
+      if (!p) return;
+      if (el.dataset.campo === 'titulo') { p.titulo = el.value.trim().slice(0, 120) || 'Planejamento'; el.value = p.titulo; return salvarPlano(p); }
+      if (el.dataset.campo === 'obs') { p.obs = el.value.trim().slice(0, 1000); return salvarPlano(p); }
+      if (el.dataset.colNome) { const c = p.colunas.find((x) => x.id === el.dataset.colNome); if (c) c.nome = el.value.trim().slice(0, 80); return salvarPlano(p); }
+      if (el.dataset.linNome) { const l = p.linhas.find((x) => x.id === el.dataset.linNome); if (l) l.nome = el.value.trim().slice(0, 80); return salvarPlano(p); }
+      const txt = el.value.trim();
+      const centavos = txt ? N.lerValor(txt) : null;
+      if (txt && Number.isNaN(centavos)) {
+        toast(`“${txt}” não é um valor. Use, por exemplo, 18.000,00.`, { erro: true });
+        el.setAttribute('aria-invalid', 'true');
+        return;
+      }
+      el.removeAttribute('aria-invalid');
+      if (el.dataset.campo === 'meta') {
+        p.meta = centavos > 0 ? centavos : null;
+        el.value = campoValor(p.meta);
+        return salvarPlano(p);
+      }
+      if (el.dataset.lin) {
+        const l = p.linhas.find((x) => x.id === el.dataset.lin);
+        if (!l) return;
+        if (centavos == null || centavos === 0) delete l.valores[el.dataset.col]; else l.valores[el.dataset.col] = centavos;
+        el.value = campoValor(l.valores[el.dataset.col]);
+        salvarPlano(p);
+      }
+    });
+    // Enter desce para a mesma coluna na linha de baixo (como numa planilha); na última linha, cria uma nova.
+    raiz.addEventListener('keydown', (e) => {
+      const el = e.target;
+      if (e.key !== 'Enter' || !el.matches('input[data-r]')) return;
+      e.preventDefault();
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      const r = Number(el.dataset.r) + (e.shiftKey ? -1 : 1), c = Number(el.dataset.c);
+      if (!focarCelula(r, c) && !e.shiftKey && r >= 0) {
+        const p = planoAtual();
+        if (p && p.linhas.length < N.LIMITES_PLANO.linhas) { acaoPlano('add-lin'); focarCelula(r, c); }
+      }
+    });
   }
 
   // ---------- conta ----------
@@ -866,7 +1087,7 @@
   (async function iniciar() {
     try {
       const [usuario, d] = await Promise.all([api('GET', '/api/eu'), api('GET', '/api/dados')]);
-      eu = usuario; rev = d.rev; dados.lancamentos = d.lancamentos;
+      eu = usuario; rev = d.rev; dados.lancamentos = d.lancamentos; dados.planos = d.planos || [];
     } catch (e) {
       $('#carregando').innerHTML = `<div>${ic('alerta')}<h3>Não foi possível carregar seus dados</h3><p>${esc(e.message)}</p>
         <button type="button" class="btn" id="tentar">Tentar de novo</button></div>`;
@@ -874,6 +1095,7 @@
       return;
     }
     $('#carregando').remove();
+    ligarPlanos();
     $('#link-admin').hidden = eu.perfil !== 'admin';
     $('#grupo-admin').hidden = eu.perfil !== 'admin';
     marcarSinc('ok');

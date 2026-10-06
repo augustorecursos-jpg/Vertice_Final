@@ -283,7 +283,76 @@
     return '﻿' + linhas.join('\r\n');
   }
 
+  // ---------- planejamentos (tabelas livres: linhas × colunas) ----------
+
+  const LIMITES_PLANO = { planos: 100, linhas: 100, colunas: 24, texto: 80 };
+
+  function novoPlano({ titulo = 'Novo planejamento', exemplo = false } = {}, gerarId = novoId) {
+    const col = (nome) => ({ id: gerarId(), nome });
+    const lin = (nome, valores = []) => ({ id: gerarId(), nome, valores });
+    const agora = Date.now();
+    if (exemplo) {
+      const c = [col('1º ano'), col('2º ano')];
+      const v = (a, b) => ({ [c[0].id]: a, [c[1].id]: b });
+      return {
+        id: gerarId(), titulo: 'Plano apartamento', meta: 30000000, obs: '', colunas: c, criadoEm: agora, atualizadoEm: agora,
+        linhas: [lin('Poupança', v(1800000, 1800000)), lin('PLR', v(3000000, 3000000)), lin('13º salário', v(600000, 600000))],
+      };
+    }
+    return { id: gerarId(), titulo, meta: null, obs: '', colunas: [col('1º ano'), col('2º ano')], linhas: [lin('', {})], criadoEm: agora, atualizadoEm: agora };
+  }
+
+  function totaisPlano(p) {
+    const porColuna = Object.fromEntries(p.colunas.map((c) => [c.id, 0]));
+    const porLinha = {};
+    for (const l of p.linhas) {
+      let t = 0;
+      for (const c of p.colunas) {
+        const v = Number.isInteger(l.valores[c.id]) ? l.valores[c.id] : 0;
+        porColuna[c.id] += v; t += v;
+      }
+      porLinha[l.id] = t;
+    }
+    const total = Object.values(porColuna).reduce((a, b) => a + b, 0);
+    const pctMeta = p.meta > 0 ? Math.max(0, Math.round((total / p.meta) * 100)) : null;
+    return { porColuna, porLinha, total, pctMeta, falta: p.meta > 0 ? Math.max(0, p.meta - total) : null };
+  }
+
+  /** Valida um planejamento vindo do navegador ou de arquivo. Devolve null se for inválido. */
+  function limparPlano(x) {
+    if (!x || typeof x !== 'object' || !Array.isArray(x.colunas) || !Array.isArray(x.linhas)) return null;
+    if (x.colunas.length > LIMITES_PLANO.colunas || x.linhas.length > LIMITES_PLANO.linhas) return null;
+    const txt = (v, max = LIMITES_PLANO.texto) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
+    const colunas = x.colunas.map((c) => ({ id: String(c?.id || novoId()), nome: txt(c?.nome) }));
+    const ids = new Set(colunas.map((c) => c.id));
+    if (ids.size !== colunas.length) return null;
+    const linhas = x.linhas.map((l) => {
+      const valores = {};
+      for (const [k, v] of Object.entries(l?.valores || {})) {
+        if (ids.has(k) && Number.isInteger(v) && Math.abs(v) <= 1e13) valores[k] = v;
+      }
+      return { id: String(l?.id || novoId()), nome: txt(l?.nome), valores };
+    });
+    const meta = Number.isInteger(x.meta) && x.meta > 0 && x.meta <= 1e13 ? x.meta : null;
+    return {
+      id: String(x.id || novoId()), titulo: txt(x.titulo, 120) || 'Planejamento', meta, obs: limparObs(x.obs),
+      colunas, linhas, criadoEm: Number(x.criadoEm) || Date.now(), atualizadoEm: Number(x.atualizadoEm) || Date.now(),
+    };
+  }
+
+  function csvPlano(p) {
+    const q = (s) => `"${String(s).replace(/"/g, '""')}"`;
+    const v = (c) => (c / 100).toFixed(2).replace('.', ',');
+    const t = totaisPlano(p);
+    const linhas = [[q(p.titulo), ...p.colunas.map((c) => q(c.nome)), 'Total'].join(';')];
+    for (const l of p.linhas) linhas.push([q(l.nome), ...p.colunas.map((c) => v(l.valores[c.id] || 0)), v(t.porLinha[l.id])].join(';'));
+    linhas.push(['TOTAL', ...p.colunas.map((c) => v(t.porColuna[c.id])), v(t.total)].join(';'));
+    if (p.meta) linhas.push(['META', ...p.colunas.map(() => ''), v(p.meta)].join(';'));
+    return '﻿' + linhas.join('\r\n');
+  }
+
   return {
+    LIMITES_PLANO, novoPlano, totaisPlano, limparPlano, csvPlano,
     VERSAO_DADOS, CATEGORIAS, CAT, MESES, MESES_CURTOS,
     lerValor, moeda, moedaCurta, valorParaCampo, dividir,
     diasNoMes, somarMeses, chaveMes, dataDe, isoDe, lerIso, situacao,
