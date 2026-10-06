@@ -39,6 +39,7 @@
     desce: '<path d="M17 7 7 17M17 17H7V7"/>',
     cofre: '<path d="M19 5c-1.5 0-2.8 1.4-3 2-3.5-1.5-11-.3-11 5 0 1.8 0 3 2 4.5V20h4v-2h3v2h4v-4c1-.5 1.7-1 2-2h2v-4h-2c0-1-.5-1.5-1-2V5z"/><path d="M2 9v1c0 1.1.9 2 2 2h1"/><path d="M16 11h.01"/>',
     parcela: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/>',
+    nota: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
     cadeado: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
     destravar: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>',
     chave: '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/>',
@@ -233,6 +234,13 @@
     f('f-desc').value = l.desc;
     f('f-valor').value = l.centavos != null ? N.valorParaCampo(l.centavos) : '';
     f('f-data').value = N.isoDe(l);
+    f('f-obs').value = l.obs || '';
+    const contarObs = () => {
+      const n = f('f-obs').value.length;
+      f('c-obs').textContent = n > N.MAX_OBS * 0.8 ? `${n}/${N.MAX_OBS}` : '';
+    };
+    f('f-obs').addEventListener('input', contarObs);
+    contarObs();
 
     if (existente) {
       f('titulo-modal').textContent = 'Editar lançamento';
@@ -289,6 +297,7 @@
     modal.addEventListener('submit', async (e) => {
       e.preventDefault();
       const desc = f('f-desc').value.trim();
+      const obs = f('f-obs').value.trim();
       const centavos = N.lerValor(f('f-valor').value);
       const data = N.lerIso(f('f-data').value);
       const okDesc = erro('desc', desc ? '' : 'Informe uma descrição.');
@@ -301,7 +310,7 @@
       if (existente) {
         const escopo = await escolherEscopo(existente, 'Editar');
         if (!escopo) return;
-        dados.lancamentos = N.editar(dados.lancamentos, existente.id, { desc, centavos, categoria, ...data }, escopo);
+        dados.lancamentos = N.editar(dados.lancamentos, existente.id, { desc, obs, centavos, categoria, ...data }, escopo);
         fechar(); salvar();
         toast('Lançamento atualizado.');
         return;
@@ -310,7 +319,7 @@
       const rec = val('rec');
       const qtd = Math.floor(+f('f-qtd').value);
       if (rec !== 'unica' && !(qtd >= 2 && qtd <= 120)) { f('f-qtd').focus(); return toast('A quantidade deve ficar entre 2 e 120.', { erro: true }); }
-      const novos = N.gerar({ desc, centavos, categoria, ...data, recorrencia: rec, quantidade: qtd, modoValor: val('modo') });
+      const novos = N.gerar({ desc, obs, centavos, categoria, ...data, recorrencia: rec, quantidade: qtd, modoValor: val('modo') });
       dados.lancamentos.push(...novos);
       fechar(); salvar();
       const msg = novos.length > 1 ? `${novos.length} lançamentos criados.` : 'Lançamento criado.';
@@ -450,7 +459,7 @@
 
     let itens = est.filtro === 'atrasados' ? atr : doMes.filter(filtroAtual ? filtroAtual[2] : () => true);
     const q = N.normalizar(est.busca.trim());
-    if (q) itens = itens.filter((l) => N.normalizar(l.desc + ' ' + CAT[l.categoria].nome).includes(q));
+    if (q) itens = itens.filter((l) => N.normalizar(`${l.desc} ${l.obs || ''} ${CAT[l.categoria].nome}`).includes(q));
     const ord = {
       venc: (a, b) => N.dataDe(a) - N.dataDe(b) || a.pago - b.pago || b.centavos - a.centavos,
       maior: (a, b) => b.centavos - a.centavos,
@@ -496,7 +505,7 @@
           aria-label="${l.pago ? 'Desmarcar' : 'Marcar como ' + c.feito.toLowerCase()}: ${esc(l.desc)}" title="${l.pago ? 'Desmarcar' : 'Marcar como ' + c.feito.toLowerCase()}">${ic('check')}</button>
         <div class="data" aria-hidden="true"><b>${d.getDate()}</b><small>${MESES_CURTOS[d.getMonth()]}${outroMes ? ' ' + String(d.getFullYear()).slice(2) : ''}</small></div>
         <div class="desc"><b title="${esc(N.titulo(l))}">${esc(l.desc)}</b>
-          <div class="tags"><span class="tag quando neutra">${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span><span class="tag cat" data-cat="${l.categoria}">${esc(c.nome)}</span>${serie}${situ}</div></div>
+          <div class="tags"><span class="tag quando neutra">${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span><span class="tag cat" data-cat="${l.categoria}">${esc(c.nome)}</span>${serie}${situ}</div>${l.obs ? `<div class="obs"><button type="button" data-acao="obs" aria-expanded="false" title="${esc(l.obs)}">${ic('nota')}<span>${esc(l.obs)}</span></button></div>` : ''}</div>
         <div class="valor">${c.tipo === 'entrada' ? '+ ' : ''}${moeda(l.centavos)}</div>
         <div class="acoes">
           <button type="button" class="btn fantasma icone peq" data-acao="editar" data-id="${esc(l.id)}" aria-label="Editar ${esc(l.desc)}" title="Editar">${ic('editar')}</button>
@@ -800,6 +809,7 @@
     }
     if (alvo.dataset.mes != null && est.secao === 'ano') return irPara(est.ano, +alvo.dataset.mes);
     const { acao, id } = alvo.dataset;
+    if (acao === 'obs') { const o = alvo.closest('.obs'); alvo.setAttribute('aria-expanded', String(o.classList.toggle('aberta'))); return; }
     if (acao === 'marcar') return alternarPago(id);
     if (acao === 'editar') { const l = dados.lancamentos.find((x) => x.id === id); return l && abrirFormulario(l); }
     if (acao === 'excluir') return excluir(id);

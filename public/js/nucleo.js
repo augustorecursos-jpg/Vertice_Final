@@ -86,6 +86,9 @@
 
   // ---------- criação ----------
 
+  const MAX_OBS = 1000;
+  const limparObs = (v) => String(v ?? '').replace(/\r/g, '').trim().slice(0, MAX_OBS);
+
   function novoId() {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
     return 'id-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
@@ -98,7 +101,7 @@
    */
   function gerar(f, gerarId = novoId) {
     const base = {
-      desc: String(f.desc).trim(), categoria: f.categoria, pago: false, criadoEm: Date.now(),
+      desc: String(f.desc).trim(), obs: limparObs(f.obs), categoria: f.categoria, pago: false, criadoEm: Date.now(),
     };
     if (f.recorrencia === 'unica' || !f.recorrencia) {
       return [{ ...base, id: gerarId(), grupo: null, parcela: null, centavos: f.centavos, ano: f.ano, mes: f.mes, dia: f.dia }];
@@ -139,7 +142,7 @@
     const ids = new Set(alvos(lista, l, escopo).map((x) => x.id));
     return lista.map((x) => {
       if (!ids.has(x.id)) return x;
-      const novo = { ...x, desc: d.desc.trim(), centavos: d.centavos, categoria: d.categoria, dia: d.dia };
+      const novo = { ...x, desc: d.desc.trim(), obs: d.obs === undefined ? (x.obs || '') : limparObs(d.obs), centavos: d.centavos, categoria: d.categoria, dia: d.dia };
       if (x.id === id && (escopo === 'este' || !x.grupo)) {
         novo.ano = d.ano; novo.mes = d.mes;
         if (x.grupo && !x.parcela) novo.grupo = null;
@@ -221,7 +224,7 @@
     if (!Number.isInteger(centavos) || centavos < 0 || !CAT[x.categoria]) return null;
     const p = x.parcela && Number.isInteger(x.parcela.n) && Number.isInteger(x.parcela.total) ? { n: x.parcela.n, total: x.parcela.total } : null;
     return {
-      id: String(x.id || novoId()), grupo: x.grupo ? String(x.grupo) : null, desc: String(x.desc || 'Sem descrição').slice(0, 120),
+      id: String(x.id || novoId()), grupo: x.grupo ? String(x.grupo) : null, desc: String(x.desc || 'Sem descrição').slice(0, 120), obs: limparObs(x.obs),
       categoria: x.categoria, centavos, ano, mes, dia: Number.isInteger(dia) && dia >= 1 && dia <= 31 ? dia : 1,
       pago: !!x.pago, parcela: p, criadoEm: Number(x.criadoEm) || Date.now(),
     };
@@ -249,7 +252,7 @@
         grupo = grupos.get(chave);
       }
       out.push({
-        id: novoId(), grupo, desc, categoria: CAT_ANTIGA[t.category], centavos: Math.round(val * 100),
+        id: novoId(), grupo, desc, obs: '', categoria: CAT_ANTIGA[t.category], centavos: Math.round(val * 100),
         ano, mes, dia: 10, pago: !!t.paid, parcela, criadoEm: Number(t.id) || Date.now(),
       });
     }
@@ -267,14 +270,14 @@
 
   function csv(lista, ano) {
     const q = (s) => `"${String(s).replace(/"/g, '""')}"`;
-    const linhas = [['Vencimento', 'Descrição', 'Categoria', 'Valor', 'Situação'].join(';')];
+    const linhas = [['Vencimento', 'Descrição', 'Categoria', 'Valor', 'Situação', 'Observações'].join(';')];
     lista.filter((l) => ano == null || l.ano === ano)
       .sort((a, b) => dataDe(a) - dataDe(b))
       .forEach((l) => {
         const c = CAT[l.categoria];
         linhas.push([
           dataDe(l).toLocaleDateString('pt-BR'), q(titulo(l)), q(c.nome),
-          (l.centavos / 100).toFixed(2).replace('.', ','), l.pago ? c.feito : c.pendente,
+          (l.centavos / 100).toFixed(2).replace('.', ','), l.pago ? c.feito : c.pendente, q(l.obs || ''),
         ].join(';'));
       });
     return '﻿' + linhas.join('\r\n');
@@ -284,7 +287,7 @@
     VERSAO_DADOS, CATEGORIAS, CAT, MESES, MESES_CURTOS,
     lerValor, moeda, moedaCurta, valorParaCampo, dividir,
     diasNoMes, somarMeses, chaveMes, dataDe, isoDe, lerIso, situacao,
-    novoId, gerar, titulo, alvos, editar, excluir,
+    MAX_OBS, novoId, gerar, titulo, alvos, editar, excluir,
     resumoMes, resumoAno, normalizar, limpar, migrarAntigo, lerBackup, csv,
   };
 });

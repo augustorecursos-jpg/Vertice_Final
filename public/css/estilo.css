@@ -85,12 +85,15 @@ kbd { font-family: inherit; font-size: .8em; font-weight: 700; background: var(-
 .btn:focus-visible, button:focus-visible, a:focus-visible { outline: 3px solid var(--claro-300); outline-offset: 2px; }
 
 /* ---------- campos ---------- */
-input[type=text], input[type=search], input[type=date], input[type=number], select {
+input[type=text], input[type=search], input[type=date], input[type=number], select, textarea {
   font: inherit; color: inherit; background: var(--papel);
   border: 1px solid var(--borda-forte); border-radius: 12px; padding: .62em .85em; width: 100%;
   transition: border-color .15s, box-shadow .15s;
 }
-input:focus, select:focus { outline: none; border-color: var(--claro); box-shadow: 0 0 0 4px rgba(32, 184, 213, .25); }
+textarea { resize: vertical; min-height: 4.8em; line-height: 1.45; }
+.rotulo-linha { display: flex; justify-content: space-between; align-items: baseline; gap: 1em; }
+.rotulo-linha .contador { font-size: .75rem; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--claro); box-shadow: 0 0 0 4px rgba(32, 184, 213, .25); }
 input[aria-invalid=true] { border-color: var(--vermelho); box-shadow: 0 0 0 4px rgba(192, 69, 58, .15); }
 label.rotulo { display: block; font-family: var(--titulo); font-weight: 800; font-size: .84rem; margin: 0 0 .35em; color: var(--marinho-900); }
 label.rotulo small { font-weight: 400; }
@@ -208,6 +211,12 @@ label.rotulo small { font-weight: 400; }
 .item .desc { min-width: 0; }
 .item .desc b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
 .item .desc .quando { display: none; }
+.item .desc .obs { display: flex; align-items: flex-start; gap: .35em; margin-top: .3em; font-size: .82rem; color: var(--suave); }
+.item .desc .obs span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.item .desc .obs svg.ic { width: 1em; height: 1em; margin-top: .2em; color: var(--ciano-600); }
+.item .desc .obs.aberta span { white-space: pre-wrap; }
+.item .desc .obs button { border: 0; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; text-align: left; display: flex; gap: .35em; min-width: 0; max-width: 100%; }
+.item .desc .obs button:hover span { color: var(--marinho-800); }
 .item .desc .tags { display: flex; gap: .35em; flex-wrap: wrap; margin-top: .2em; }
 .item .valor { font-family: var(--titulo); font-weight: 800; white-space: nowrap; font-variant-numeric: tabular-nums; text-align: right; }
 .item[data-tipo=entrada] .valor { color: var(--verde); }

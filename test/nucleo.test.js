@@ -140,5 +140,18 @@ test('backup novo descarta registros inválidos', () => {
 test('CSV usa ponto e vírgula e vírgula decimal', () => {
   const ls = N.gerar({ desc: 'Conta "luz"', centavos: 12345, categoria: 'fixa', ano: 2026, mes: 0, dia: 9 }, ids);
   const linhas = N.csv(ls, 2026).split('\r\n');
-  assert.equal(linhas[1], '09/01/2026;"Conta ""luz""";"Despesa fixa";123,45;A pagar');
+  assert.equal(linhas[1], '09/01/2026;"Conta ""luz""";"Despesa fixa";123,45;A pagar;""');
+  const [comObs] = N.gerar({ desc: 'Luz', obs: 'Pago via Pix; ver "boleto"', centavos: 100, categoria: 'fixa', ano: 2026, mes: 0, dia: 9 }, ids);
+  assert.ok(N.csv([comObs], 2026).endsWith(';"Pago via Pix; ver ""boleto"""'));
+});
+
+test('observações são gravadas, editadas na série e limitadas', () => {
+  const ls = N.gerar({ desc: 'Academia', obs: '  Plano anual  ', centavos: 10000, categoria: 'fixa', ano: 2026, mes: 0, dia: 5, recorrencia: 'mensal', quantidade: 3 }, ids);
+  assert.ok(ls.every((l) => l.obs === 'Plano anual'));
+  const d = { desc: 'Academia', centavos: 10000, categoria: 'fixa', dia: 5, ano: 2026, mes: 1 };
+  const ed = N.editar(ls, ls[1].id, { ...d, obs: 'Mudou de unidade' }, 'proximos');
+  assert.deepEqual(ed.map((l) => l.obs), ['Plano anual', 'Mudou de unidade', 'Mudou de unidade']);
+  assert.equal(N.editar(ls, ls[0].id, d, 'este')[0].obs, 'Plano anual');
+  assert.equal(N.limpar({ ...ls[0], obs: 'x'.repeat(5000) }).obs.length, N.MAX_OBS);
+  assert.equal(N.limpar({ ...ls[0], obs: undefined }).obs, '');
 });

@@ -64,7 +64,7 @@
               <h2><span class="bolha"><i data-ic="lista"></i></span> <span id="titulo-lista">Lançamentos</span></h2>
             </div>
             <div class="barra-ferr" style="margin:0">
-              <div class="busca"><i data-ic="busca"></i><input type="search" id="busca" placeholder="Buscar descrição" aria-label="Buscar lançamento"></div>
+              <div class="busca"><i data-ic="busca"></i><input type="search" id="busca" placeholder="Buscar lançamento" aria-label="Buscar lançamento"></div>
               <select id="ordem" aria-label="Ordenar">
                 <option value="venc">Por vencimento</option>
                 <option value="maior">Maior valor</option>
@@ -222,6 +222,10 @@
           <label class="rotulo" for="f-data">Vencimento</label>
           <input type="date" id="f-data" required>
           <p class="erro-campo" id="e-data"></p>
+        </div>
+        <div class="inteiro">
+          <div class="rotulo-linha"><label class="rotulo" for="f-obs">Observações <small>(opcional)</small></label><small class="contador" id="c-obs" aria-live="polite"></small></div>
+          <textarea id="f-obs" rows="3" maxlength="1000" placeholder="Ex.: pago via Pix, nº do contrato, combinado com o fornecedor…"></textarea>
         </div>
         <fieldset class="inteiro pilulas" id="f-recorrencia">
           <legend class="rotulo" style="padding:0;margin-bottom:.45em">Repetição</legend>
