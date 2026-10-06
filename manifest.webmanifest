@@ -1,0 +1,14 @@
+{
+  "name": "Vértice · Gestão financeira",
+  "short_name": "Vértice",
+  "description": "Lançamentos, vencimentos, parcelas e visão anual das suas finanças.",
+  "lang": "pt-BR",
+  "start_url": "./#mes",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f2f6fa",
+  "theme_color": "#17397d",
+  "icons": [
+    { "src": "img/icone.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

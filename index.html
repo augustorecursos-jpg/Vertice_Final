@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#17397d">
+  <meta name="description" content="Vértice — gestão financeira pessoal: lançamentos, vencimentos, parcelas e visão anual.">
+  <title>Vértice · Gestão financeira</title>
+  <link rel="icon" href="img/icone.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="img/icone.svg">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="preload" href="fonts/montserrat-latin-800-normal.woff" as="font" type="font/woff" crossorigin>
+  <link rel="stylesheet" href="css/estilo.css">
+</head>
+<body>
+<div class="app">
+  <aside class="lateral">
+    <a class="marca" href="#mes" aria-label="Vértice, início">
+      <img src="img/icone.svg" alt="">
+      <div><b>Vértice</b><small>Gestão financeira</small></div>
+    </a>
+    <nav id="menu" aria-label="Seções">
+      <div class="grupo">Finanças</div>
+      <a href="#mes" data-secao="mes"><i data-ic="painel"></i> <span>Mês</span> <span class="cont" id="cont-atrasados" hidden></span></a>
+      <a href="#ano" data-secao="ano"><i data-ic="grafico"></i> <span>Visão anual</span></a>
+      <div class="grupo">Conta</div>
+      <a href="#ajustes" data-secao="ajustes"><i data-ic="ajustes"></i> <span>Backup e ajustes</span></a>
+    </nav>
+    <div class="cartao-usuario">
+      <span class="av" id="av-usuario">V</span>
+      <div><b id="nome-usuario">Você</b><small>Dados neste dispositivo</small></div>
+    </div>
+    <div class="assinatura">Uma solução <b>AR Consultoria</b></div>
+  </aside>
+
+  <div class="principal">
+    <header class="topo">
+      <div class="ola"><b id="saudacao">Olá</b><small id="hoje"></small></div>
+      <div class="dir">
+        <div class="mes">
+          <button type="button" id="mes-ant" aria-label="Mês anterior"><i data-ic="esq"></i></button>
+          <label><i data-ic="calendario"></i><span><small id="rotulo-periodo">Mês de referência</small><span id="nome-mes"></span></span>
+            <input type="month" id="competencia" aria-label="Escolher mês"></label>
+          <button type="button" id="mes-prox" aria-label="Próximo mês"><i data-ic="dir"></i></button>
+        </div>
+        <button type="button" class="btn sec" id="btn-hoje">Hoje</button>
+        <button type="button" class="btn novo" data-novo><i data-ic="mais"></i> Novo lançamento</button>
+      </div>
+    </header>
+
+    <main class="conteudo" id="conteudo">
+      <!-- ================= MÊS ================= -->
+      <section data-secao="mes" hidden>
+        <div id="aviso-atrasados"></div>
+        <div class="cards" id="cards-mes"></div>
+
+        <div class="cartao">
+          <div class="cartao-cab">
+            <div>
+              <h2><span class="bolha"><i data-ic="lista"></i></span> <span id="titulo-lista">Lançamentos</span></h2>
+            </div>
+            <div class="barra-ferr" style="margin:0">
+              <div class="busca"><i data-ic="busca"></i><input type="search" id="busca" placeholder="Buscar descrição" aria-label="Buscar lançamento"></div>
+              <select id="ordem" aria-label="Ordenar">
+                <option value="venc">Por vencimento</option>
+                <option value="maior">Maior valor</option>
+                <option value="menor">Menor valor</option>
+                <option value="recentes">Mais recentes</option>
+              </select>
+            </div>
+          </div>
+          <div class="filtros" id="filtros" role="group" aria-label="Filtrar"></div>
+          <div class="lista" id="lista"></div>
+          <div class="rodape-lista" id="rodape-lista"></div>
+        </div>
+      </section>
+
+      <!-- ================= ANO ================= -->
+      <section data-secao="ano" hidden>
+        <div class="cards" id="cards-ano"></div>
+        <div class="cartao">
+          <div class="cartao-cab">
+            <div>
+              <h2><span class="bolha ciano"><i data-ic="grafico"></i></span> Entradas × saídas</h2>
+              <p>Clique em um mês para abrir os lançamentos dele.</p>
+            </div>
+          </div>
+          <div class="grafico" id="grafico"></div>
+          <div class="legenda-graf"><span><i class="rec"></i> Receitas</span><span><i class="desp"></i> Despesas + investimentos</span></div>
+        </div>
+        <div class="cartao">
+          <div class="cartao-cab">
+            <div>
+              <h2><span class="bolha"><i data-ic="tabela"></i></span> Consolidado por categoria</h2>
+              <p>Abra uma categoria para ver cada lançamento. Valores em reais.</p>
+            </div>
+            <button type="button" class="btn sec peq" id="csv-ano"><i data-ic="planilha"></i> Exportar CSV</button>
+          </div>
+          <div class="tabela-wrap"><table class="t" id="tabela-ano"></table></div>
+        </div>
+      </section>
+
+      <!-- ================= AJUSTES ================= -->
+      <section data-secao="ajustes" hidden>
+        <div id="aviso-migracao"></div>
+        <div class="grade-ajustes">
+          <div class="cartao">
+            <div class="cartao-cab"><h2><span class="bolha"><i data-ic="usuario"></i></span> Seu perfil</h2></div>
+            <form id="form-perfil" class="linha" autocomplete="off">
+              <div style="flex:1 1 220px">
+                <label class="rotulo" for="perfil-nome">Como quer ser chamado?</label>
+                <input type="text" id="perfil-nome" maxlength="60" placeholder="Seu nome">
+              </div>
+              <button class="btn" style="align-self:flex-end">Salvar</button>
+            </form>
+            <p class="dica">Usado só para a saudação. Não pedimos e-mail, CPF nem senha: os dados ficam neste navegador.</p>
+          </div>
+
+          <div class="cartao">
+            <div class="cartao-cab">
+              <div>
+                <h2><span class="bolha ciano"><i data-ic="escudo"></i></span> Backup</h2>
+                <p id="info-backup"></p>
+              </div>
+            </div>
+            <div class="linha">
+              <button type="button" class="btn" id="exportar"><i data-ic="baixar"></i> Baixar backup (.json)</button>
+              <label class="btn sec" for="arquivo-importar"><i data-ic="enviar"></i> Restaurar backup</label>
+              <input type="file" id="arquivo-importar" accept=".json,application/json" hidden>
+            </div>
+            <p class="dica">O restaurar também aceita arquivos exportados do Vértice antigo.</p>
+          </div>
+
+          <div class="cartao">
+            <div class="cartao-cab"><h2><span class="bolha indigo"><i data-ic="info"></i></span> Como o Vértice funciona</h2></div>
+            <ul class="lista-info">
+              <li><span class="bolha"><i data-ic="calendario"></i></span><div><b>Vencimentos.</b> Cada lançamento tem uma data. Atrasados e os que vencem em até 3 dias ficam destacados.</div></li>
+              <li><span class="bolha ciano"><i data-ic="repetir"></i></span><div><b>Séries.</b> Recorrências e parcelamentos podem ser editados ou excluídos só no mês, dali em diante ou inteiros.</div></li>
+              <li><span class="bolha verde"><i data-ic="check"></i></span><div><b>Status.</b> Marque despesas como pagas, receitas como recebidas e investimentos como aplicados. O saldo realizado acompanha.</div></li>
+              <li><span class="bolha indigo"><i data-ic="teclado"></i></span><div><b>Atalhos.</b> <kbd>N</kbd> novo lançamento, <kbd>←</kbd> <kbd>→</kbd> troca o mês, <kbd>/</kbd> busca.</div></li>
+            </ul>
+          </div>
+
+          <div class="cartao perigo">
+            <div class="cartao-cab">
+              <div>
+                <h2><span class="bolha vermelho"><i data-ic="lixo"></i></span> Apagar todos os dados</h2>
+                <p>Remove todos os lançamentos de todos os anos deste navegador. Baixe um backup antes.</p>
+              </div>
+            </div>
+            <button type="button" class="btn perigo" id="apagar-tudo"><i data-ic="lixo"></i> Apagar tudo…</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<button type="button" class="fab" data-novo aria-label="Novo lançamento"><i data-ic="mais"></i></button>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<!-- ================= MODAL DE LANÇAMENTO ================= -->
+<template id="tpl-lancamento">
+  <div class="fundo-modal">
+    <form class="modal" role="dialog" aria-modal="true" aria-labelledby="titulo-modal" novalidate autocomplete="off">
+      <div class="cab-modal">
+        <h2 id="titulo-modal">Novo lançamento</h2>
+        <button type="button" class="btn fantasma icone" data-fechar aria-label="Fechar"><i data-ic="x"></i></button>
+      </div>
+      <div class="grade-form">
+        <fieldset class="inteiro pilulas" id="f-categorias">
+          <legend class="rotulo" style="padding:0;margin-bottom:.45em">Tipo</legend>
+        </fieldset>
+        <div class="inteiro">
+          <label class="rotulo" for="f-desc">Descrição</label>
+          <input type="text" id="f-desc" maxlength="120" placeholder="Ex.: Aluguel, Salário, Cartão" list="sugestoes" required>
+          <datalist id="sugestoes"></datalist>
+          <p class="erro-campo" id="e-desc"></p>
+        </div>
+        <div>
+          <label class="rotulo" for="f-valor" id="rotulo-valor">Valor</label>
+          <div class="campo-valor"><span>R$</span><input type="text" id="f-valor" inputmode="decimal" placeholder="0,00" required></div>
+          <p class="erro-campo" id="e-valor"></p>
+        </div>
+        <div>
+          <label class="rotulo" for="f-data">Vencimento</label>
+          <input type="date" id="f-data" required>
+          <p class="erro-campo" id="e-data"></p>
+        </div>
+        <fieldset class="inteiro pilulas" id="f-recorrencia">
+          <legend class="rotulo" style="padding:0;margin-bottom:.45em">Repetição</legend>
+          <label><input type="radio" name="rec" value="unica" checked><span>Só uma vez</span></label>
+          <label><input type="radio" name="rec" value="mensal"><span>Todo mês</span></label>
+          <label><input type="radio" name="rec" value="parcelada"><span>Parcelado</span></label>
+        </fieldset>
+        <div id="bloco-qtd" hidden>
+          <label class="rotulo" for="f-qtd" id="rotulo-qtd">Quantos meses?</label>
+          <input type="number" id="f-qtd" min="2" max="120" value="12" inputmode="numeric">
+        </div>
+        <fieldset id="bloco-modo" class="pilulas" hidden style="align-self:end">
+          <legend class="sr">O valor informado é</legend>
+          <label><input type="radio" name="modo" value="total" checked><span>Valor total</span></label>
+          <label><input type="radio" name="modo" value="parcela"><span>Valor da parcela</span></label>
+        </fieldset>
+        <div class="inteiro resumo-serie" id="resumo-serie" hidden></div>
+      </div>
+      <div class="rodape-modal">
+        <button type="button" class="btn sec" data-fechar>Cancelar</button>
+        <button class="btn" id="f-salvar"><i data-ic="check"></i> Salvar lançamento</button>
+      </div>
+    </form>
+  </div>
+</template>
+
+<script src="js/nucleo.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
