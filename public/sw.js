@@ -1,7 +1,7 @@
 /* Vértice — cache dos arquivos estáticos (CSS, JS, fontes, ícone).
  * Páginas e /api sempre vão ao servidor: login, permissões e dados nunca saem do cache.
  * Troque a versão ao publicar mudanças. */
-const CACHE = 'vertice-v3';
+const CACHE = 'vertice-v4';
 const ARQUIVOS = [
   'css/estilo.css', 'js/nucleo.js', 'js/app.js', 'js/entrar.js', 'img/icone.svg', 'manifest.webmanifest',
   'fonts/montserrat-latin-400-normal.woff', 'fonts/montserrat-latin-700-normal.woff', 'fonts/montserrat-latin-800-normal.woff',

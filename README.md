@@ -18,6 +18,16 @@ Regras de proteção:
 - O admin não consegue bloquear, excluir ou rebaixar a própria conta.
 - Sempre sobra pelo menos um administrador ativo.
 
+## Assinaturas
+
+- **Prazo:** cada usuário tem **30 dias contados a partir do primeiro acesso**. Administradores não têm assinatura.
+- **Sinalização:** quando faltarem poucos dias (padrão: 5), o menu **Usuários** mostra um contador e a tela lista quem precisa de atenção. O contador inclui as assinaturas que vencem hoje e as vencidas.
+- **Aviso:** o ícone ✈ gera a mensagem padrão já preenchida com o nome, o vencimento e o valor. O texto pode ser ajustado antes de enviar, e o envio é por **WhatsApp** (no telefone cadastrado), **e-mail** (quando o login é um e-mail) ou copiando o texto.
+- **Renovou:** registra o pagamento e soma 30 dias. A contagem parte do vencimento atual, ou de hoje se a assinatura já venceu.
+- **Ajustes:** o vencimento pode ser alterado à mão em "Editar".
+- **Configurações:** valor da mensalidade (padrão **R$ 11,99**), quantos dias antes avisar e o texto da mensagem. Campos automáticos do texto: `{nome}`, `{vencimento}`, `{prazo}` e `{valor}`.
+- **Bloqueio manual:** o sistema não bloqueia sozinho. Quem decide é você, com o botão de bloquear.
+
 **Privacidade:** o administrador gerencia contas, mas o sistema não mostra os lançamentos de ninguém. Nenhuma tela ou rota da API faz isso. A tela "Atividade recente" registra entradas e ações administrativas, sem valores financeiros.
 
 **Segurança:**
@@ -33,6 +43,8 @@ Regras de proteção:
 - **Visão anual:** gráfico de entradas × saídas, tabela por categoria com detalhe e saldo acumulado.
 - **Sincronização:** os dados ficam no servidor e o mesmo login funciona no celular e no computador. Se duas telas alterarem ao mesmo tempo, a segunda recebe a versão mais recente em vez de sobrescrever.
 - **Seus dados:** cópia em JSON, CSV do ano e importação, que também aceita arquivos do Vértice antigo.
+- **Observações** em cada lançamento: aparecem na lista, entram na busca e no CSV.
+- **Planejamentos:** tabelas livres (ex.: "Plano apartamento" com uma coluna por ano), com total por coluna, total final, meta opcional, CSV e duplicação.
 - **Celular:** layout responsivo e instalável (PWA).
 
 ## Rodar localmente

@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const express = require('express');
-const { db, DATA_DIR, hashSenha, conferirSenha, senhaTemporaria } = require('./db');
+const { db, DATA_DIR, hashSenha, conferirSenha, senhaTemporaria, lerConfig, gravarConfig, CONFIG_PADRAO } = require('./db');
 const N = require('./public/js/nucleo.js');
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -98,6 +98,22 @@ function auditar(req, acao, detalhe = '') {
     .run(req.usuario?.login || '-', acao, String(detalhe).slice(0, 500), req.ip || '');
 }
 
+// ---------- assinaturas (só para perfil usuário) ----------
+const DIAS_ASSINATURA = 30;
+const hojeISO = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
+const somarDias = (iso, dias) => { const d = new Date(`${iso}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + dias); return d.toISOString().slice(0, 10); };
+const diasAte = (iso) => Math.round((Date.parse(`${iso}T12:00:00Z`) - Date.parse(`${hojeISO()}T12:00:00Z`)) / 86400000);
+const dataValida = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) && !Number.isNaN(Date.parse(`${v}T12:00:00Z`))
+  && new Date(`${v}T12:00:00Z`).toISOString().slice(0, 10) === v;
+
+/** ok | aviso (vence em até N dias) | hoje | vencida | pendente (ainda não entrou) | isento (admin) */
+function situacaoAssinatura(u, diasAviso = lerConfig().diasAviso) {
+  if (u.perfil === 'admin') return { cod: 'isento', dias: null };
+  if (!u.assinatura_vence) return { cod: 'pendente', dias: null };
+  const dias = diasAte(u.assinatura_vence);
+  return { cod: dias < 0 ? 'vencida' : dias === 0 ? 'hoje' : dias <= diasAviso ? 'aviso' : 'ok', dias };
+}
+
 const texto = (v, max = 300) => {
   const t = String(v ?? '').replace(/\s+/g, ' ').trim();
   return t ? t.slice(0, max) : null;
@@ -106,6 +122,11 @@ const loginValido = (v) => /^[a-z0-9._@-]{3,80}$/i.test(String(v || ''));
 const publico = (u) => ({
   id: u.id, nome: u.nome, login: u.login, perfil: u.perfil, ativo: !!u.ativo,
   trocarSenha: !!u.trocar_senha, ultimoAcesso: u.ultimo_acesso, criadoEm: u.criado_em,
+});
+const telefoneValido = (v) => { const d = String(v || '').replace(/\D/g, ''); return d.length >= 10 && d.length <= 13 ? d : null; };
+const paraAdmin = (u, diasAviso) => ({
+  ...publico(u), telefone: u.telefone || '', assinaturaInicio: u.assinatura_inicio, assinaturaVence: u.assinatura_vence,
+  assinatura: situacaoAssinatura(u, diasAviso),
 });
 
 function transacao(fn) {
@@ -169,6 +190,10 @@ app.post('/api/login', (req, res) => {
   }
   falhas.delete(ip);
   db.prepare("UPDATE usuarios SET ultimo_acesso = datetime('now') WHERE id = ?").run(u.id);
+  if (u.perfil !== 'admin' && !u.assinatura_vence) {
+    const hoje = hojeISO();
+    db.prepare('UPDATE usuarios SET assinatura_inicio = ?, assinatura_vence = ? WHERE id = ?').run(hoje, somarDias(hoje, DIAS_ASSINATURA), u.id);
+  }
   definirSessao(res, u);
   req.usuario = u;
   auditar(req, 'entrou');
@@ -244,19 +269,22 @@ app.put('/api/dados', exigirLogin, (req, res) => {
 
 // ---------- administração de contas ----------
 app.get('/api/admin/usuarios', exigirAdmin, (req, res) => {
-  res.json(db.prepare('SELECT * FROM usuarios ORDER BY ativo DESC, nome COLLATE NOCASE').all().map(publico));
+  const { diasAviso } = lerConfig();
+  res.json(db.prepare('SELECT * FROM usuarios ORDER BY ativo DESC, nome COLLATE NOCASE').all().map((u) => paraAdmin(u, diasAviso)));
 });
 
 app.post('/api/admin/usuarios', exigirAdmin, (req, res) => {
   const nome = texto(req.body?.nome, 120);
   const login = texto(req.body?.login, 80)?.toLowerCase();
   const perfil = req.body?.perfil === 'admin' ? 'admin' : 'usuario';
+  const telefone = req.body?.telefone ? telefoneValido(req.body.telefone) : '';
+  if (telefone === null) return res.status(400).json({ erro: 'Telefone inválido: use DDD + número, ex. (11) 98765-4321.' });
   if (!nome) return res.status(400).json({ erro: 'Informe o nome.' });
   if (!loginValido(login)) return res.status(400).json({ erro: 'Login inválido: use de 3 a 80 letras, números, ponto, hífen, _ ou @ (pode ser o e-mail).' });
   if (db.prepare('SELECT 1 FROM usuarios WHERE login = ?').get(login)) return res.status(409).json({ erro: 'Esse login já existe.' });
   const senha = senhaTemporaria();
-  const r = db.prepare('INSERT INTO usuarios (nome, login, senha_hash, perfil, trocar_senha) VALUES (?, ?, ?, ?, 1)')
-    .run(nome, login, hashSenha(senha), perfil);
+  const r = db.prepare('INSERT INTO usuarios (nome, login, senha_hash, perfil, trocar_senha, telefone) VALUES (?, ?, ?, ?, 1, ?)')
+    .run(nome, login, hashSenha(senha), perfil, telefone);
   auditar(req, 'criou usuário', `${login} (${perfil})`);
   res.status(201).json({ id: Number(r.lastInsertRowid), login, senhaTemporaria: senha });
 });
@@ -287,14 +315,58 @@ app.put('/api/admin/usuarios/:id', exigirAdmin, (req, res) => {
   const ativo = req.body?.ativo === undefined ? u.ativo : (req.body.ativo ? 1 : 0);
   const erro = validarMudancaAdmin(req, u, { perfil, ativo });
   if (erro) return res.status(400).json({ erro });
-  db.prepare('UPDATE usuarios SET nome = ?, perfil = ?, ativo = ? WHERE id = ?').run(nome, perfil, ativo, u.id);
+  let telefone = u.telefone || '';
+  if (req.body?.telefone !== undefined) {
+    telefone = req.body.telefone ? telefoneValido(req.body.telefone) : '';
+    if (telefone === null) return res.status(400).json({ erro: 'Telefone inválido: use DDD + número, ex. (11) 98765-4321.' });
+  }
+  let vence = u.assinatura_vence;
+  if (req.body?.assinaturaVence !== undefined) {
+    vence = req.body.assinaturaVence || null;
+    if (vence && !dataValida(vence)) return res.status(400).json({ erro: 'Data de vencimento inválida.' });
+  }
+  db.prepare('UPDATE usuarios SET nome = ?, perfil = ?, ativo = ?, telefone = ?, assinatura_vence = ?, assinatura_inicio = COALESCE(assinatura_inicio, CASE WHEN ? IS NULL THEN NULL ELSE ? END) WHERE id = ?')
+    .run(nome, perfil, ativo, telefone, vence, vence, hojeISO(), u.id);
   const mudancas = [
+    vence !== u.assinatura_vence && `vencimento ${vence ? vence.split('-').reverse().join('/') : 'removido'}`,
+    telefone !== (u.telefone || '') && 'telefone',
     nome !== u.nome && `nome "${nome}"`,
     perfil !== u.perfil && `perfil ${perfil}`,
     ativo !== u.ativo && (ativo ? 'desbloqueado' : 'bloqueado'),
   ].filter(Boolean);
   if (mudancas.length) auditar(req, ativo !== u.ativo ? (ativo ? 'desbloqueou usuário' : 'bloqueou usuário') : 'alterou usuário', `${u.login}: ${mudancas.join(', ')}`);
   res.json({ ok: true });
+});
+
+/** Renova por mais 30 dias: a partir do vencimento atual, ou de hoje se já venceu (ou nunca começou). */
+app.post('/api/admin/usuarios/:id/renovar', exigirAdmin, (req, res) => {
+  const u = buscarAlvo(req, res);
+  if (!u) return;
+  if (u.perfil === 'admin') return res.status(400).json({ erro: 'Administradores não têm assinatura.' });
+  const hoje = hojeISO();
+  const base = u.assinatura_vence && u.assinatura_vence > hoje ? u.assinatura_vence : hoje;
+  const vence = somarDias(base, DIAS_ASSINATURA);
+  db.prepare('UPDATE usuarios SET assinatura_vence = ?, assinatura_inicio = COALESCE(assinatura_inicio, ?) WHERE id = ?').run(vence, hoje, u.id);
+  auditar(req, 'renovou assinatura', `${u.login}: até ${vence.split('-').reverse().join('/')}`);
+  res.json({ assinaturaVence: vence });
+});
+
+app.get('/api/admin/config', exigirAdmin, (req, res) => res.json({ ...lerConfig(), mensagemPadrao: CONFIG_PADRAO.mensagem_aviso }));
+
+app.put('/api/admin/config', exigirAdmin, (req, res) => {
+  const { mensalidade, diasAviso, mensagem } = req.body || {};
+  if (mensalidade !== undefined && !(Number.isInteger(mensalidade) && mensalidade > 0 && mensalidade <= 10000000)) {
+    return res.status(400).json({ erro: 'Valor da mensalidade inválido.' });
+  }
+  if (diasAviso !== undefined && !(Number.isInteger(diasAviso) && diasAviso >= 1 && diasAviso <= 30)) {
+    return res.status(400).json({ erro: 'Os dias de aviso devem ficar entre 1 e 30.' });
+  }
+  if (mensagem !== undefined && !String(mensagem).trim()) return res.status(400).json({ erro: 'A mensagem não pode ficar vazia.' });
+  if (mensalidade !== undefined) gravarConfig('mensalidade_centavos', mensalidade);
+  if (diasAviso !== undefined) gravarConfig('dias_aviso', diasAviso);
+  if (mensagem !== undefined) gravarConfig('mensagem_aviso', String(mensagem).replace(/\r/g, '').trim().slice(0, 2000));
+  auditar(req, 'alterou as configurações de assinatura');
+  res.json(lerConfig());
 });
 
 app.post('/api/admin/usuarios/:id/senha', exigirAdmin, (req, res) => {

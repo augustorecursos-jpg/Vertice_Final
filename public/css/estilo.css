@@ -380,6 +380,23 @@ table.t.plano tr.final th { font-size: .8rem; }
   table.t.plano tr.final td[data-tot-final] { text-align: left; }
 }
 
+/* ---------- assinaturas ---------- */
+.lateral nav a .cont.aviso { background: var(--ambar); }
+table.t.simples td.cel-assin { white-space: nowrap; }
+.txt-admin { color: var(--indigo); font-weight: 700; }
+table.t.simples td.acoes { white-space: nowrap; }
+table.t.simples td.acoes .btn + .btn { margin-left: 0; }
+table.t.simples td.cel-assin .venc-data { display: block; margin-top: .2em; font-size: .76rem; }
+table.t.simples tr.atencao td { background: #fffaf0; }
+table.t.simples .aviso-msg { color: var(--ciano-700); }
+.lista-atencao { list-style: none; margin: .6em 0 0; padding: 0; display: grid; gap: .4em; }
+.lista-atencao li { display: flex; align-items: center; gap: .6em; flex-wrap: wrap; }
+.lista-atencao .acoes-atencao { margin-left: auto; display: flex; gap: .4em; }
+.canais { display: flex; gap: .5em; flex-wrap: wrap; margin-top: 1em; }
+.btn.whats { background: linear-gradient(180deg, #25b05b, #1d8f49); box-shadow: 0 4px 12px -4px rgba(29, 143, 73, .55); }
+.previa-msg { white-space: pre-wrap; background: var(--claro-50); border: 1px solid var(--borda); border-radius: 14px; padding: 1em 1.1em; font-size: .92rem; line-height: 1.55; }
+code { background: var(--claro-100); color: var(--marinho-800); padding: .1em .45em; border-radius: 6px; font-size: .88em; }
+
 /* ---------- ajustes ---------- */
 .grade-ajustes { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.2em; align-items: start; }
 .grade-ajustes .cartao { margin: 0; }
@@ -531,6 +548,17 @@ tr.inativo .pessoa .av { background: #edf1f5; color: var(--suave); }
 .lista-auditoria time { color: var(--suave); font-variant-numeric: tabular-nums; }
 @media (max-width: 640px) {
   table.t.simples .esconder-cel { display: none; }
+  #tabela-usuarios thead { display: none; }
+  #tabela-usuarios, #tabela-usuarios tbody { display: block; }
+  #tabela-usuarios tr { display: flex; flex-wrap: wrap; align-items: center; gap: .45em .5em; padding: .85em .8em; border-bottom: 1px solid var(--borda); }
+  #tabela-usuarios tr:last-child { border-bottom: 0; }
+  #tabela-usuarios td { display: block; padding: 0; border: 0; background: none !important; }
+  #tabela-usuarios td:first-child { flex: 1 1 100%; }
+  #tabela-usuarios td.cel-assin { display: flex; align-items: center; gap: .4em; }
+  #tabela-usuarios td.cel-assin .venc-data { margin: 0; }
+  #tabela-usuarios td.acoes { flex: 1 1 100%; text-align: left; border-top: 1px dashed var(--borda); padding-top: .35em; }
+  #tabela-usuarios tr.atencao { background: #fffaf0; }
+  #tabela-usuarios td.esconder-cel { display: none; }
   .so-celular { display: inline; }
   .lista-auditoria li { grid-template-columns: 1fr; gap: .1em; }
 }

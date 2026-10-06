@@ -42,7 +42,37 @@ CREATE TABLE IF NOT EXISTS auditoria (
   criado_em TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_auditoria_data ON auditoria(criado_em);
+
+CREATE TABLE IF NOT EXISTS config (
+  chave TEXT PRIMARY KEY,
+  valor TEXT
+);
 `);
+
+// Migrações: colunas novas em bancos já existentes.
+const colunas = new Set(db.prepare('PRAGMA table_info(usuarios)').all().map((c) => c.name));
+for (const [nome, def] of [
+  ['telefone', 'TEXT'],              // para o aviso por WhatsApp
+  ['assinatura_inicio', 'TEXT'],     // AAAA-MM-DD do primeiro acesso
+  ['assinatura_vence', 'TEXT'],      // AAAA-MM-DD; renovar soma 30 dias
+]) {
+  if (!colunas.has(nome)) db.exec(`ALTER TABLE usuarios ADD COLUMN ${nome} ${def}`);
+}
+
+// ---------- configurações editáveis pelo admin ----------
+const CONFIG_PADRAO = {
+  mensalidade_centavos: '1199',
+  dias_aviso: '5',
+  mensagem_aviso: 'Olá, {nome}! Tudo bem?\n\nSua assinatura do Vértice vence em {vencimento} ({prazo}). Deseja renovar o plano?\n\nA mensalidade é de {valor} e garante mais 30 dias de acesso a lançamentos, visão anual e planejamentos.\n\nÉ só responder esta mensagem que eu envio os dados para pagamento.\n\nAR Consultoria',
+};
+function lerConfig() {
+  const cfg = { ...CONFIG_PADRAO };
+  for (const r of db.prepare('SELECT chave, valor FROM config').all()) if (r.chave in cfg) cfg[r.chave] = r.valor;
+  return { mensalidade: Number(cfg.mensalidade_centavos), diasAviso: Number(cfg.dias_aviso), mensagem: cfg.mensagem_aviso };
+}
+function gravarConfig(chave, valor) {
+  db.prepare('INSERT INTO config (chave, valor) VALUES (?, ?) ON CONFLICT (chave) DO UPDATE SET valor = excluded.valor').run(chave, String(valor));
+}
 
 // ---------- senhas (scrypt) ----------
 function hashSenha(senha) {
@@ -67,4 +97,4 @@ function senhaTemporaria() {
   return `${s.slice(0, 4)}-${s.slice(4, 8)}-${s.slice(8)}`;
 }
 
-module.exports = { db, DATA_DIR, DB_FILE, hashSenha, conferirSenha, senhaTemporaria };
+module.exports = { db, DATA_DIR, DB_FILE, hashSenha, conferirSenha, senhaTemporaria, lerConfig, gravarConfig, CONFIG_PADRAO };

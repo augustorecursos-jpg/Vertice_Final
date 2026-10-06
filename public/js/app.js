@@ -39,6 +39,9 @@
     desce: '<path d="M17 7 7 17M17 17H7V7"/>',
     cofre: '<path d="M19 5c-1.5 0-2.8 1.4-3 2-3.5-1.5-11-.3-11 5 0 1.8 0 3 2 4.5V20h4v-2h3v2h4v-4c1-.5 1.7-1 2-2h2v-4h-2c0-1-.5-1.5-1-2V5z"/><path d="M2 9v1c0 1.1.9 2 2 2h1"/><path d="M16 11h.01"/>',
     parcela: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/>',
+    mensagem: '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
+    dinheiro: '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/>',
+    email: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>',
     alvo: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
     brilho: '<path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/>',
     nota: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
@@ -886,22 +889,58 @@
   const iniciais = (nome) => String(nome || '?').trim().split(/\s+/).filter((p) => !/^(da|de|do|das|dos|e)$/i.test(p)).map((p) => p[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
   let usuarios = [];
 
+  let configAssin = { mensalidade: 1199, diasAviso: 5, mensagem: '', mensagemPadrao: '' };
+  const dataBR = (iso) => (iso ? iso.split('-').reverse().join('/') : '');
+  const precisaAtencao = (u) => u.ativo && ['aviso', 'hoje', 'vencida'].includes(u.assinatura?.cod);
+
+  function tagAssinatura(u) {
+    const a = u.assinatura || {};
+    if (a.cod === 'isento') return '<span class="suave">—</span>';
+    if (a.cod === 'pendente') return `<span class="tag neutra" title="Os 30 dias começam no primeiro acesso">${ic('relogio')} Começa no 1º acesso</span>`;
+    const ate = `<small class="venc-data">até ${dataBR(u.assinaturaVence)}</small>`;
+    if (a.cod === 'vencida') return `<span class="tag erro">${ic('alerta')} Vencida há ${-a.dias} ${a.dias === -1 ? 'dia' : 'dias'}</span>${ate}`;
+    if (a.cod === 'hoje') return `<span class="tag erro">${ic('alerta')} Vence hoje</span>${ate}`;
+    if (a.cod === 'aviso') return `<span class="tag aviso">${ic('relogio')} Vence em ${a.dias} ${a.dias === 1 ? 'dia' : 'dias'}</span>${ate}`;
+    return `<span class="tag ok">${ic('check')} Em dia</span>${ate}`;
+  }
+
+  function seloAssinaturas(lista) {
+    const n = lista.filter(precisaAtencao).length;
+    const c = $('#cont-assinaturas');
+    c.hidden = !n; c.textContent = n; c.title = `${n} assinatura(s) vencendo ou vencida(s)`;
+  }
+
   async function renderUsuarios() {
     const corpo = $('#tabela-usuarios');
     if (!usuarios.length) corpo.innerHTML = '<tbody><tr><td>Carregando…</td></tr></tbody>';
     try {
-      const [lista, aud] = await Promise.all([api('GET', '/api/admin/usuarios'), api('GET', '/api/admin/auditoria?limite=100')]);
-      usuarios = lista;
+      const [lista, aud, cfg] = await Promise.all([api('GET', '/api/admin/usuarios'), api('GET', '/api/admin/auditoria?limite=100'), api('GET', '/api/admin/config')]);
+      usuarios = lista; configAssin = cfg;
+      seloAssinaturas(lista);
       const ativos = lista.filter((u) => u.ativo).length;
       $('#resumo-usuarios').textContent = `${lista.length} ${lista.length === 1 ? 'conta' : 'contas'} · ${ativos} ${ativos === 1 ? 'ativa' : 'ativas'}${lista.length - ativos ? ` · ${lista.length - ativos} bloqueada(s)` : ''}`;
-      corpo.innerHTML = `<thead><tr><th>Usuário</th><th class="esconder-cel">Perfil</th><th>Situação</th><th class="esconder-cel">Último acesso</th><th></th></tr></thead><tbody>${lista.map((u) => {
+
+      const atencao = lista.filter(precisaAtencao).sort((a, b) => a.assinatura.dias - b.assinatura.dias);
+      $('#aviso-assinaturas').innerHTML = atencao.length ? `<div class="aviso-box ${atencao.some((u) => u.assinatura.cod !== 'aviso') ? 'alerta' : 'cuidado'}">${ic('alerta')}
+        <div><b>${atencao.length} ${atencao.length === 1 ? 'assinatura precisa' : 'assinaturas precisam'} de atenção.</b>
+        Confirme se renovaram; se não, envie o aviso ou bloqueie o acesso.
+        <ul class="lista-atencao">${atencao.map((u) => `<li><b>${esc(u.nome)}</b> · ${u.assinatura.cod === 'vencida' ? `venceu em ${dataBR(u.assinaturaVence)}` : u.assinatura.cod === 'hoje' ? 'vence hoje' : `vence em ${dataBR(u.assinaturaVence)}`}
+          <span class="acoes-atencao"><button type="button" class="btn sec peq" data-usr="aviso" data-uid="${u.id}">${ic('mensagem')} Enviar aviso</button>
+          <button type="button" class="btn sec peq" data-usr="renovar" data-uid="${u.id}">${ic('repetir')} Renovou</button></span></li>`).join('')}</ul></div></div>` : '';
+
+      corpo.innerHTML = `<thead><tr><th>Usuário</th><th>Situação</th><th>Assinatura</th><th class="esconder-cel">Último acesso</th><th></th></tr></thead><tbody>${lista.map((u) => {
         const souEu = u.id === eu.id;
-        return `<tr class="${u.ativo ? '' : 'inativo'}">
-          <td><div class="pessoa"><span class="av">${esc(iniciais(u.nome))}</span><div><b>${esc(u.nome)}${souEu ? ' <span class="tag info">você</span>' : ''}</b><small>${esc(u.login)}${u.perfil === 'admin' ? '<span class="so-celular"> · admin</span>' : ''}</small></div></div></td>
-          <td class="esconder-cel">${u.perfil === 'admin' ? '<span class="tag indigo">Administrador</span>' : '<span class="tag neutra">Usuário</span>'}</td>
-          <td>${!u.ativo ? `<span class="tag erro">${ic('cadeado')} Bloqueado</span>` : u.trocarSenha ? `<span class="tag aviso">${ic('relogio')} Aguardando 1º acesso</span>` : `<span class="tag ok">${ic('check')} Ativo</span>`}</td>
+        const assinante = u.perfil !== 'admin';
+        return `<tr class="${u.ativo ? '' : 'inativo'} ${precisaAtencao(u) ? 'atencao' : ''}">
+          <td><div class="pessoa"><span class="av">${esc(iniciais(u.nome))}</span><div><b>${esc(u.nome)}${souEu ? ' <span class="tag info">você</span>' : ''}</b><small>${esc(u.login)}${u.perfil === 'admin' ? ' · <span class="txt-admin">administrador</span>' : ''}</small></div></div></td>
+          <td>${!u.ativo ? `<span class="tag erro">${ic('cadeado')} Bloqueado</span>`
+            : u.trocarSenha ? `<span class="tag aviso">${ic('relogio')} ${u.ultimoAcesso ? 'Senha temporária' : 'Aguardando 1º acesso'}</span>`
+            : `<span class="tag ok">${ic('check')} Ativo</span>`}</td>
+          <td class="cel-assin">${tagAssinatura(u)}</td>
           <td class="esconder-cel">${u.ultimoAcesso ? esc(dataHora(u.ultimoAcesso)) : '<span class="suave">Nunca entrou</span>'}</td>
           <td class="acoes">
+            ${assinante && u.assinaturaVence ? `<button type="button" class="btn fantasma icone peq aviso-msg" data-usr="aviso" data-uid="${u.id}" title="Enviar aviso de vencimento" aria-label="Enviar aviso de vencimento para ${esc(u.nome)}">${ic('mensagem')}</button>` : ''}
+            ${assinante ? `<button type="button" class="btn fantasma icone peq" data-usr="renovar" data-uid="${u.id}" title="Renovar +30 dias" aria-label="Renovar assinatura de ${esc(u.nome)} por 30 dias">${ic('repetir')}</button>` : ''}
             <button type="button" class="btn fantasma icone peq" data-usr="editar" data-uid="${u.id}" title="Editar" aria-label="Editar ${esc(u.nome)}">${ic('editar')}</button>
             ${souEu ? '' : `
             <button type="button" class="btn fantasma icone peq" data-usr="senha" data-uid="${u.id}" title="Redefinir senha" aria-label="Redefinir senha de ${esc(u.nome)}">${ic('chave')}</button>
@@ -909,12 +948,94 @@
             <button type="button" class="btn fantasma icone peq apagar" data-usr="excluir" data-uid="${u.id}" title="Excluir" aria-label="Excluir ${esc(u.nome)}">${ic('lixo')}</button>`}
           </td></tr>`;
       }).join('')}</tbody>`;
+
+      if (!$('#cfg-assin').contains(document.activeElement)) {
+        $('#cfg-valor').value = N.valorParaCampo(cfg.mensalidade);
+        $('#cfg-dias').value = cfg.diasAviso;
+        $('#cfg-msg').value = cfg.mensagem;
+      }
       $('#auditoria').innerHTML = aud.length
         ? aud.map((a) => `<li><time>${esc(dataHora(a.criado_em))}</time><span><b>${esc(a.usuario)}</b> ${esc(a.acao)}${a.detalhe ? ` · <span class="suave">${esc(a.detalhe)}</span>` : ''}</span></li>`).join('')
         : '<li><span class="suave">Nenhuma atividade ainda.</span></li>';
     } catch (e) {
       corpo.innerHTML = `<tbody><tr><td class="txt-erro">${esc(e.message)}</td></tr></tbody>`;
     }
+  }
+
+  /** Preenche a mensagem padrão com os dados do usuário. */
+  function montarMensagem(u, modelo = configAssin.mensagem) {
+    const a = u.assinatura || {};
+    const prazo = a.cod === 'vencida' ? `venceu há ${-a.dias} ${a.dias === -1 ? 'dia' : 'dias'}`
+      : a.cod === 'hoje' ? 'hoje' : a.dias === 1 ? 'amanhã' : `daqui a ${a.dias} dias`;
+    const valores = {
+      nome: String(u.nome || '').trim().split(/\s+/)[0], vencimento: dataBR(u.assinaturaVence), prazo, valor: moeda(configAssin.mensalidade),
+    };
+    return modelo.replace(/\{(nome|vencimento|prazo|valor)\}/g, (_, k) => valores[k]);
+  }
+
+  function enviarAviso(u) {
+    const tel = String(u.telefone || '').replace(/\D/g, '');
+    const telIntl = tel && (tel.length <= 11 ? '55' + tel : tel);
+    const email = /@/.test(u.login) ? u.login : '';
+    const { modal } = abrirModal(`
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="t-aviso">
+        <div class="cab-modal"><h2 id="t-aviso">Aviso de vencimento</h2>
+          <button type="button" class="btn fantasma icone" data-fechar aria-label="Fechar"><i data-ic="x"></i></button></div>
+        <p style="margin-top:0">Para <b>${esc(u.nome)}</b> · assinatura ${u.assinatura.cod === 'vencida' ? 'venceu' : 'vence'} em <b>${dataBR(u.assinaturaVence)}</b> · mensalidade <b>${moeda(configAssin.mensalidade)}</b></p>
+        <label class="rotulo" for="aviso-texto">Mensagem <small>(pode ajustar antes de enviar)</small></label>
+        <textarea id="aviso-texto" rows="9">${esc(montarMensagem(u))}</textarea>
+        <div class="canais">
+          <button type="button" class="btn whats" data-canal="whatsapp">${ic('mensagem')} WhatsApp${tel ? '' : ' (escolher contato)'}</button>
+          ${email ? `<button type="button" class="btn sec" data-canal="email">${ic('email')} E-mail</button>` : ''}
+          <button type="button" class="btn sec" data-canal="copiar">${ic('copiar')} Copiar texto</button>
+        </div>
+        <p class="dica">${tel ? `WhatsApp abre a conversa com ${esc(formatarTelefone(tel))}.` : 'Sem telefone cadastrado: o WhatsApp abre para você escolher o contato. Cadastre o telefone em “Editar”.'}</p>
+      </div>`, { estreito: true });
+    modal.addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-canal]');
+      if (!b) return;
+      const texto = $('#aviso-texto', modal).value.trim();
+      if (b.dataset.canal === 'whatsapp') window.open(`https://wa.me/${telIntl || ''}?text=${encodeURIComponent(texto)}`, '_blank', 'noopener');
+      if (b.dataset.canal === 'email') location.href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent('Sua assinatura do Vértice')}&body=${encodeURIComponent(texto)}`;
+      if (b.dataset.canal === 'copiar') {
+        try { await navigator.clipboard.writeText(texto); toast('Mensagem copiada.'); } catch { toast('Não foi possível copiar. Selecione o texto e copie.', { erro: true }); }
+      }
+    });
+  }
+
+  function formatarTelefone(t) {
+    const d = String(t || '').replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, '');
+    if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+    if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+    return d;
+  }
+
+  function ligarConfigAssinaturas() {
+    const form = $('#cfg-assin');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const mensalidade = N.lerValor($('#cfg-valor').value);
+      if (!(mensalidade > 0)) return toast('Informe o valor da mensalidade, por exemplo 11,99.', { erro: true });
+      try {
+        configAssin = { ...configAssin, ...(await api('PUT', '/api/admin/config', {
+          mensalidade, diasAviso: Math.floor(+$('#cfg-dias').value), mensagem: $('#cfg-msg').value,
+        })) };
+        toast('Configurações de assinatura salvas.');
+        renderUsuarios();
+      } catch (er) { toast(er.message, { erro: true }); }
+    });
+    $('#cfg-padrao').addEventListener('click', () => { $('#cfg-msg').value = configAssin.mensagemPadrao; $('#cfg-msg').focus(); });
+    $('#cfg-previa').addEventListener('click', () => {
+      const exemplo = { nome: 'Maria Clara', assinaturaVence: new Date(Date.now() + 3 * 864e5).toLocaleDateString('sv-SE'), assinatura: { cod: 'aviso', dias: 3 } };
+      const mensalidade = N.lerValor($('#cfg-valor').value);
+      const antes = configAssin.mensalidade;
+      if (mensalidade > 0) configAssin.mensalidade = mensalidade;
+      const txt = montarMensagem(exemplo, $('#cfg-msg').value);
+      configAssin.mensalidade = antes;
+      abrirModal(`<div class="modal" role="dialog" aria-modal="true" aria-labelledby="t-previa"><div class="cab-modal"><h2 id="t-previa">Prévia da mensagem</h2>
+        <button type="button" class="btn fantasma icone" data-fechar aria-label="Fechar"><i data-ic="x"></i></button></div>
+        <div class="previa-msg">${esc(txt)}</div><div class="rodape-modal"><button type="button" class="btn" data-fechar>Fechar</button></div></div>`, { estreito: true });
+    });
   }
 
   function mostrarSenha(titulo, u, senha) {
@@ -943,12 +1064,16 @@
           <div class="inteiro"><label class="rotulo" for="u-nome">Nome</label><input type="text" id="u-nome" maxlength="120" value="${esc(u?.nome || '')}" required></div>
           <div class="inteiro"><label class="rotulo" for="u-login">Login <small>(pode ser o e-mail)</small></label>
             <input type="text" id="u-login" maxlength="80" autocapitalize="none" spellcheck="false" value="${esc(u?.login || '')}" ${u ? 'disabled' : 'required'}></div>
+          <div class="${u && u.perfil !== 'admin' ? '' : 'inteiro'}"><label class="rotulo" for="u-tel">Telefone / WhatsApp <small>(opcional)</small></label>
+            <input type="text" id="u-tel" inputmode="tel" maxlength="20" placeholder="(11) 98765-4321" value="${esc(formatarTelefone(u?.telefone))}"></div>
+          ${u && u.perfil !== 'admin' ? `<div><label class="rotulo" for="u-venc">Assinatura vence em</label>
+            <input type="date" id="u-venc" value="${esc(u.assinaturaVence || '')}"></div>` : ''}
           <fieldset class="inteiro pilulas"${u && u.id === eu.id ? ' disabled' : ''}>
             <legend class="rotulo" style="padding:0;margin-bottom:.45em">Perfil</legend>
             <label><input type="radio" name="perfil" value="usuario" ${u?.perfil === 'admin' ? '' : 'checked'}><span>Usuário</span></label>
             <label><input type="radio" name="perfil" value="admin" ${u?.perfil === 'admin' ? 'checked' : ''}><span>Administrador</span></label>
           </fieldset>
-          <p class="inteiro dica" style="margin:0">Administradores criam, bloqueiam e excluem contas. Ninguém, nem o administrador, vê os lançamentos de outra pessoa pelo sistema.</p>
+          <p class="inteiro dica" style="margin:0">${u ? '' : 'A assinatura de 30 dias começa no primeiro acesso. '}Administradores não têm assinatura e não veem os lançamentos de ninguém.</p>
         </div>
         <p class="erro-campo" id="u-erro" role="alert"></p>
         <div class="rodape-modal"><button type="button" class="btn sec" data-fechar>Cancelar</button>
@@ -958,14 +1083,18 @@
       e.preventDefault();
       const nome = $('#u-nome', modal).value.trim();
       const perfil = $('input[name=perfil]:checked', modal).value;
+      const telefone = $('#u-tel', modal).value.trim();
       try {
         if (u) {
-          await api('PUT', `/api/admin/usuarios/${u.id}`, { nome, perfil });
+          const dados = { nome, perfil, telefone };
+          if ($('#u-venc', modal)) dados.assinaturaVence = $('#u-venc', modal).value || null;
+          await api('PUT', `/api/admin/usuarios/${u.id}`, dados);
+          renderUsuarios();
           if (u.id === eu.id) eu.nome = nome;
           fechar(); toast('Usuário atualizado.'); render();
         } else {
           const login = $('#u-login', modal).value.trim();
-          const r = await api('POST', '/api/admin/usuarios', { nome, login, perfil });
+          const r = await api('POST', '/api/admin/usuarios', { nome, login, perfil, telefone });
           fechar(); renderUsuarios();
           mostrarSenha('Usuário criado', { nome, login: r.login }, r.senhaTemporaria);
         }
@@ -978,6 +1107,18 @@
     if (!u) return;
     try {
       if (acao === 'editar') return formUsuario(u);
+      if (acao === 'aviso') return enviarAviso(u);
+      if (acao === 'renovar') {
+        const hoje = new Date().toLocaleDateString('sv-SE');
+        const base = u.assinaturaVence && u.assinaturaVence > hoje ? u.assinaturaVence : hoje;
+        const ok = await confirmar({ titulo: 'Confirmar renovação?', botao: 'Renovar +30 dias',
+          texto: `Registrar que <b>${esc(u.nome)}</b> pagou a mensalidade de <b>${moeda(configAssin.mensalidade)}</b>. A assinatura passa a valer 30 dias a partir de ${base === hoje ? 'hoje' : dataBR(base)}.` });
+        if (!ok) return;
+        const r = await api('POST', `/api/admin/usuarios/${id}/renovar`, {});
+        if (!u.ativo) toast(`Renovada até ${dataBR(r.assinaturaVence)}. O acesso continua bloqueado: use “Desbloquear”.`, { tempo: 8000 });
+        else toast(`Assinatura renovada até ${dataBR(r.assinaturaVence)}.`);
+        return renderUsuarios();
+      }
       if (acao === 'senha') {
         const ok = await confirmar({ titulo: 'Redefinir senha?', botao: 'Gerar senha temporária',
           texto: `<b>${esc(u.nome)}</b> sai de todos os dispositivos e só entra de novo com a senha temporária que vamos gerar agora.` });
@@ -1096,6 +1237,10 @@
     }
     $('#carregando').remove();
     ligarPlanos();
+    if (eu.perfil === 'admin') {
+      ligarConfigAssinaturas();
+      api('GET', '/api/admin/usuarios').then(seloAssinaturas).catch(() => {});
+    }
     $('#link-admin').hidden = eu.perfil !== 'admin';
     $('#grupo-admin').hidden = eu.perfil !== 'admin';
     marcarSinc('ok');

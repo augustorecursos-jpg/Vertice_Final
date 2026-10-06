@@ -27,7 +27,7 @@
       <div class="grupo">Conta</div>
       <a href="#ajustes" data-secao="ajustes"><i data-ic="ajustes"></i> <span>Minha conta</span></a>
       <div class="grupo" id="grupo-admin" hidden>Administração</div>
-      <a href="#usuarios" data-secao="usuarios" id="link-admin" hidden><i data-ic="usuarios"></i> <span>Usuários</span></a>
+      <a href="#usuarios" data-secao="usuarios" id="link-admin" hidden><i data-ic="usuarios"></i> <span>Usuários</span> <span class="cont aviso" id="cont-assinaturas" hidden></span></a>
     </nav>
     <div class="cartao-usuario">
       <span class="av" id="av-usuario">V</span>
@@ -171,6 +171,7 @@
 
       <!-- ================= USUÁRIOS (admin) ================= -->
       <section data-secao="usuarios" hidden>
+        <div id="aviso-assinaturas"></div>
         <div class="cartao">
           <div class="cartao-cab">
             <div>
@@ -181,6 +182,30 @@
           </div>
           <div class="tabela-wrap"><table class="t simples" id="tabela-usuarios"></table></div>
           <p class="dica">Bloquear tira o acesso na hora e guarda os dados. Excluir apaga a conta e os lançamentos. Redefinir gera uma senha temporária e desconecta a pessoa.</p>
+        </div>
+        <div class="cartao">
+          <div class="cartao-cab">
+            <div>
+              <h2><span class="bolha verde"><i data-ic="dinheiro"></i></span> Assinaturas</h2>
+              <p>Cada usuário tem 30 dias a partir do primeiro acesso. Renovar soma mais 30 dias.</p>
+            </div>
+          </div>
+          <form id="cfg-assin" class="grade-form" autocomplete="off">
+            <div><label class="rotulo" for="cfg-valor">Valor da mensalidade</label>
+              <div class="campo-valor"><span>R$</span><input type="text" id="cfg-valor" inputmode="decimal" placeholder="11,99"></div></div>
+            <div><label class="rotulo" for="cfg-dias">Avisar quando faltarem <small>(dias)</small></label>
+              <input type="number" id="cfg-dias" min="1" max="30" inputmode="numeric"></div>
+            <div class="inteiro">
+              <label class="rotulo" for="cfg-msg">Mensagem padrão de aviso</label>
+              <textarea id="cfg-msg" rows="8" maxlength="2000"></textarea>
+              <p class="dica">Campos automáticos: <code>{nome}</code> primeiro nome · <code>{vencimento}</code> data · <code>{prazo}</code> “daqui a 3 dias”, “hoje”… · <code>{valor}</code> mensalidade.</p>
+            </div>
+            <div class="inteiro linha fim">
+              <button type="button" class="btn fantasma" id="cfg-padrao">Restaurar texto padrão</button>
+              <button type="button" class="btn sec" id="cfg-previa">Ver prévia</button>
+              <button class="btn">Salvar</button>
+            </div>
+          </form>
         </div>
         <div class="cartao">
           <div class="cartao-cab">
