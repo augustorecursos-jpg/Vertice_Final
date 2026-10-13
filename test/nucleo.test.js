@@ -188,3 +188,59 @@ test('planejamento: CSV com totais', () => {
   assert.equal(linhas[1], '"Poupança";18000,00;18000,00;36000,00');
   assert.equal(linhas[4], 'TOTAL;54000,00;54000,00;108000,00');
 });
+
+test('cartão de crédito é uma despesa', () => {
+  assert.equal(N.CAT.cartao.tipo, 'saida');
+  const base = { ano: 2026, mes: 9, dia: 1, grupo: null, parcela: null, pago: false };
+  const r = N.resumoMes([{ ...base, id: 'a', categoria: 'cartao', centavos: 25000 }, { ...base, id: 'b', categoria: 'receita', centavos: 100000 }], 2026, 9);
+  assert.equal(r.saidas, 25000);
+  assert.equal(r.saldoPrevisto, 75000);
+});
+
+test('provisões: repetição mensal com o mesmo grupo', () => {
+  const ps = N.gerarProvisoes({ nome: 'Mercado', centavos: 120000, categoria: 'variavel', ano: 2026, mes: 10, repetir: true, quantidade: 3 }, ids);
+  assert.equal(ps.length, 3);
+  assert.deepEqual(ps.map((p) => [p.ano, p.mes]), [[2026, 10], [2026, 11], [2027, 0]]);
+  assert.ok(ps.every((p) => p.grupo === ps[0].grupo));
+  assert.equal(ps[0].id, ps[0].grupo);
+  assert.equal(N.gerarProvisoes({ nome: 'X', centavos: 1, categoria: 'receita', ano: 2026, mes: 0, auto: true }, ids)[0].categoria, null);
+});
+
+test('provisões: consumo por vínculo, parcelas por mês, automático por categoria e estouro', () => {
+  const compras = N.gerarProvisoes({ nome: 'Compras parceladas', centavos: 80000, ano: 2026, mes: 9, repetir: true, quantidade: 2 }, ids);
+  const provs = [
+    ...compras,
+    ...N.gerarProvisoes({ nome: 'Cartão', centavos: 50000, categoria: 'cartao', auto: true, ano: 2026, mes: 9 }, ids),
+  ];
+  const grupoCompras = compras[0].grupo;
+  const tv = N.gerar({ desc: 'TV', centavos: 300000, categoria: 'cartao', ano: 2026, mes: 9, dia: 10, recorrencia: 'parcelada', quantidade: 6, provisao: grupoCompras }, ids);
+  const avulsos = [
+    ...N.gerar({ desc: 'Restaurante', centavos: 30000, categoria: 'cartao', ano: 2026, mes: 9, dia: 3 }, ids),
+    ...N.gerar({ desc: 'App', centavos: 25000, categoria: 'cartao', ano: 2026, mes: 9, dia: 4 }, ids),
+    ...N.gerar({ desc: 'Luz', centavos: 9999, categoria: 'variavel', ano: 2026, mes: 9, dia: 5 }, ids),
+  ];
+  avulsos[0].pago = true;
+  const c = N.consumoProvisoes([...tv, ...avulsos], provs, 2026, 9);
+  const porNome = Object.fromEntries(c.map((x) => [x.provisao.nome, x]));
+  // A parcela da TV (cartão) vai para "Compras parceladas" e não é contada de novo na provisão automática do cartão.
+  assert.equal(porNome['Compras parceladas'].consumido, 50000);
+  assert.equal(porNome['Compras parceladas'].restante, 30000);
+  assert.equal(porNome['Cartão'].consumido, 55000);
+  assert.equal(porNome['Cartão'].pago, 30000);
+  assert.equal(porNome['Cartão'].excedente, 5000);
+  assert.equal(porNome['Cartão'].pct, 110);
+  assert.equal(N.reservadoProvisoes([...tv, ...avulsos], provs, 2026, 9), 30000);
+  // No mês seguinte, a 2ª parcela consome a provisão daquele mês.
+  assert.equal(N.consumoProvisoes(tv, provs, 2026, 10)[0].consumido, 50000);
+});
+
+test('provisões: limpeza e vínculo preservado nos lançamentos', () => {
+  assert.equal(N.limparProvisao({ nome: '', centavos: 100, ano: 2026, mes: 0 }), null);
+  assert.equal(N.limparProvisao({ nome: 'x', centavos: 0, ano: 2026, mes: 0 }), null);
+  const p = N.limparProvisao({ id: 'p1', nome: ' Natal ', centavos: 150000, categoria: 'receita', auto: true, ano: 2026, mes: 11 });
+  assert.deepEqual([p.nome, p.grupo, p.categoria, p.auto], ['Natal', 'p1', null, false]);
+  const [l] = N.gerar({ desc: 'Presente', centavos: 100, categoria: 'variavel', ano: 2026, mes: 11, dia: 1, provisao: 'p1' }, ids);
+  assert.equal(N.limpar(l).provisao, 'p1');
+  assert.equal(N.editar([l], l.id, { desc: 'Presente', centavos: 100, categoria: 'variavel', dia: 1, ano: 2026, mes: 11 })[0].provisao, 'p1');
+  assert.equal(N.editar([l], l.id, { desc: 'Presente', centavos: 100, categoria: 'variavel', dia: 1, ano: 2026, mes: 11, provisao: null })[0].provisao, null);
+});

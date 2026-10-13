@@ -231,11 +231,11 @@ app.post('/api/eu/senha', exigirLogin, (req, res) => {
 // carteiras.dados guarda { lancamentos, planos }. Versões antigas guardavam só a lista de lançamentos.
 function carteira(uid) {
   const c = db.prepare('SELECT dados, rev FROM carteiras WHERE usuario_id = ?').get(uid);
-  if (!c) return { rev: 0, lancamentos: [], planos: [] };
+  if (!c) return { rev: 0, lancamentos: [], planos: [], provisoes: [] };
   const d = JSON.parse(c.dados);
   return Array.isArray(d)
-    ? { rev: c.rev, lancamentos: d, planos: [] }
-    : { rev: c.rev, lancamentos: d.lancamentos || [], planos: d.planos || [] };
+    ? { rev: c.rev, lancamentos: d, planos: [], provisoes: [] }
+    : { rev: c.rev, lancamentos: d.lancamentos || [], planos: d.planos || [], provisoes: d.provisoes || [] };
 }
 
 app.get('/api/dados', exigirLogin, (req, res) => {
@@ -244,8 +244,9 @@ app.get('/api/dados', exigirLogin, (req, res) => {
 });
 
 app.put('/api/dados', exigirLogin, (req, res) => {
-  const { rev, lancamentos, planos } = req.body || {};
-  if (!Number.isInteger(rev) || !Array.isArray(lancamentos) || (planos !== undefined && !Array.isArray(planos))) {
+  const { rev, lancamentos, planos, provisoes } = req.body || {};
+  if (!Number.isInteger(rev) || !Array.isArray(lancamentos) || (planos !== undefined && !Array.isArray(planos))
+    || (provisoes !== undefined && !Array.isArray(provisoes))) {
     return res.status(400).json({ erro: 'Formato inválido.' });
   }
   if (lancamentos.length > MAX_LANCAMENTOS) return res.status(413).json({ erro: `Limite de ${MAX_LANCAMENTOS} lançamentos.` });
@@ -254,6 +255,9 @@ app.put('/api/dados', exigirLogin, (req, res) => {
   if (limpos.some((l) => !l)) return res.status(400).json({ erro: 'Há lançamentos inválidos.' });
   const planosLimpos = planos?.map(N.limparPlano);
   if (planosLimpos?.some((p) => !p)) return res.status(400).json({ erro: 'Há planejamentos inválidos.' });
+  if (provisoes && provisoes.length > N.MAX_PROVISOES) return res.status(413).json({ erro: `Limite de ${N.MAX_PROVISOES} provisões.` });
+  const provisoesLimpas = provisoes?.map(N.limparProvisao);
+  if (provisoesLimpas?.some((p) => !p)) return res.status(400).json({ erro: 'Há provisões inválidas.' });
 
   const r = transacao(() => {
     const atual = carteira(req.usuario.id);
@@ -261,7 +265,7 @@ app.put('/api/dados', exigirLogin, (req, res) => {
     const nova = rev + 1;
     db.prepare(`INSERT INTO carteiras (usuario_id, dados, rev) VALUES (?, ?, ?)
       ON CONFLICT (usuario_id) DO UPDATE SET dados = excluded.dados, rev = excluded.rev, atualizado_em = datetime('now')`)
-      .run(req.usuario.id, JSON.stringify({ lancamentos: limpos, planos: planosLimpos || atual.planos }), nova);
+      .run(req.usuario.id, JSON.stringify({ lancamentos: limpos, planos: planosLimpos || atual.planos, provisoes: provisoesLimpas || atual.provisoes }), nova);
     return { rev: nova };
   });
   if (r.conflito) return res.status(409).json({ erro: 'Seus dados foram alterados em outro dispositivo.', ...r.conflito });

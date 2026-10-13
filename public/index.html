@@ -58,6 +58,7 @@
       <section data-secao="mes" hidden>
         <div id="aviso-atrasados"></div>
         <div class="cards" id="cards-mes"></div>
+        <div id="provisoes"></div>
 
         <div class="cartao">
           <div class="cartao-cab">
@@ -257,6 +258,11 @@
         <div class="inteiro">
           <div class="rotulo-linha"><label class="rotulo" for="f-obs">Observações <small>(opcional)</small></label><small class="contador" id="c-obs" aria-live="polite"></small></div>
           <textarea id="f-obs" rows="3" maxlength="1000" placeholder="Ex.: pago via Pix, nº do contrato, combinado com o fornecedor…"></textarea>
+        </div>
+        <div class="inteiro" id="bloco-prov" hidden>
+          <label class="rotulo" for="f-prov">Consome a provisão <small>(opcional)</small></label>
+          <select id="f-prov"><option value="">Nenhuma</option></select>
+          <p class="dica" id="dica-prov">Em parcelas e contas mensais, cada mês consome a provisão daquele mês.</p>
         </div>
         <fieldset class="inteiro pilulas" id="f-recorrencia">
           <legend class="rotulo" style="padding:0;margin-bottom:.45em">Repetição</legend>

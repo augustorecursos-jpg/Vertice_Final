@@ -176,6 +176,7 @@ label.rotulo small { font-weight: 400; }
 [data-cat=variavel] { --cor: var(--ciano-600); }
 [data-cat=investimento] { --cor: var(--indigo); }
 [data-cat=poupanca] { --cor: var(--ambar); }
+[data-cat=cartao] { --cor: #c2410c; }
 .tag.cat { background: color-mix(in srgb, var(--cor) 12%, white); color: var(--cor); }
 .tag.cat::before { content: ''; width: .5em; height: .5em; border-radius: 50%; background: var(--cor); }
 
@@ -328,6 +329,41 @@ table.t tr.saldo td:first-child, table.t tr.acum td:first-child { color: var(--m
 table.t td.pos { color: var(--verde); }
 table.t td.neg { color: var(--vermelho); }
 table.t tr:last-child td { border-bottom: 0; }
+
+/* ---------- provisões ---------- */
+.provisoes .cartao-cab { margin-bottom: .8em; }
+.resumo-prov { display: flex; gap: .4em 1.4em; flex-wrap: wrap; font-size: .88rem; color: var(--suave); margin-bottom: .9em; }
+.resumo-prov b { color: var(--marinho-900); font-variant-numeric: tabular-nums; }
+.lista-prov { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: .8em; }
+.prov { border: 1px solid var(--borda); border-radius: 14px; padding: .85em 1em .7em; background: linear-gradient(180deg, #fff 55%, var(--claro-50)); }
+.prov-topo { display: flex; flex-direction: column; gap: .35em; }
+.prov-nome b { display: block; font-family: var(--titulo); color: var(--marinho-900); }
+.prov-nome .tags { display: flex; gap: .3em; flex-wrap: wrap; margin-top: .25em; }
+.prov-valores { font-variant-numeric: tabular-nums; }
+.prov-valores b { font-family: var(--titulo); font-size: 1.05rem; color: var(--marinho-900); }
+.prov-barra { margin: .6em 0 .45em; height: 9px; }
+.prov.quase .prov-barra > span { background: linear-gradient(90deg, #e9b44c, var(--ambar)); }
+.prov.estourou { border-color: #f0cfca; background: linear-gradient(180deg, #fff 55%, #fff6f5); }
+.prov.estourou .prov-barra > span { background: linear-gradient(90deg, #e98a7f, var(--vermelho)); }
+.prov-rodape { display: flex; justify-content: space-between; align-items: center; gap: .5em; flex-wrap: wrap; font-size: .82rem; color: var(--suave); }
+.prov-rodape b { color: var(--marinho-900); }
+.prov-rodape b.txt-erro { color: var(--vermelho); }
+.prov-acoes { display: flex; gap: .1em; margin-left: auto; }
+.prov-acoes .btn { color: var(--suave); }
+.prov-acoes .btn.ativo { background: var(--marinho-800); color: #fff; }
+.prov-acoes .btn.apagar:hover { color: var(--vermelho); background: var(--vermelho-100); }
+.prov-obs { margin: .4em 0 0; font-size: .8rem; color: var(--suave); display: flex; gap: .35em; }
+.prov-obs svg.ic { color: var(--ciano-600); margin-top: .15em; }
+.tag.prov-tag { background: var(--ciano-100); color: var(--ciano-700); }
+.filtros button.filtro-prov { background: var(--ciano-700); border-color: var(--ciano-700); color: #fff; display: inline-flex; align-items: center; gap: .35em; }
+.check-linha { display: flex; gap: .6em; align-items: flex-start; font-size: .9rem; cursor: pointer; background: var(--claro-50); border: 1px solid var(--borda); border-radius: 12px; padding: .7em .8em; }
+.check-linha input { margin-top: .25em; accent-color: var(--primaria); width: 1.05em; height: 1.05em; }
+.check-linha small { display: block; color: var(--suave); font-size: .8rem; }
+input[type=month] { font: inherit; color: inherit; background: var(--papel); border: 1px solid var(--borda-forte); border-radius: 12px; padding: .62em .85em; width: 100%; }
+.prov { min-width: 0; }
+@media (max-width: 640px) {
+  .lista-prov { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* ---------- planejamentos ---------- */
 .grade-planos { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1em; }

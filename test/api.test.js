@@ -111,6 +111,23 @@ test('planejamentos são salvos junto e validados', async () => {
   db.prepare('UPDATE carteiras SET rev = 1 WHERE usuario_id = ?').run(idAna);
 });
 
+test('provisões são salvas junto, validadas e mantidas quando omitidas', async () => {
+  const { db } = require('../db');
+  const revAtual = () => db.prepare('SELECT rev FROM carteiras WHERE usuario_id = ?').get(idAna).rev;
+  const prov = { id: 'pv1', grupo: 'pv1', nome: 'Mercado', centavos: 120000, categoria: 'variavel', auto: true, ano: 2026, mes: 9 };
+  const comVinculo = lanc('a1', { categoria: 'cartao', provisao: 'pv1' });
+  let r = await ana('PUT', '/api/dados', { rev: revAtual(), lancamentos: [comVinculo, lanc('a2')], provisoes: [prov] });
+  assert.equal(r.status, 200);
+  let d = (await ana('GET', '/api/dados')).dados;
+  assert.equal(d.provisoes[0].nome, 'Mercado');
+  assert.equal(d.lancamentos.find((l) => l.id === 'a1').provisao, 'pv1');
+  assert.equal(d.lancamentos.find((l) => l.id === 'a1').categoria, 'cartao');
+  r = await ana('PUT', '/api/dados', { rev: revAtual(), lancamentos: [lanc('a1'), lanc('a2')] });
+  assert.equal((await ana('GET', '/api/dados')).dados.provisoes.length, 1);
+  assert.equal((await ana('PUT', '/api/dados', { rev: revAtual(), lancamentos: [], provisoes: [{ nome: '', centavos: 1, ano: 2026, mes: 0 }] })).status, 400);
+  db.prepare('UPDATE carteiras SET rev = 1 WHERE usuario_id = ?').run(idAna);
+});
+
 test('dados no formato antigo (só a lista) continuam legíveis', async () => {
   const { db } = require('../db');
   const antes = db.prepare('SELECT dados FROM carteiras WHERE usuario_id = ?').get(idAna).dados;

@@ -16,6 +16,7 @@
     { id: 'receita', nome: 'Receita', tipo: 'entrada', feito: 'Recebido', pendente: 'A receber' },
     { id: 'fixa', nome: 'Despesa fixa', tipo: 'saida', feito: 'Pago', pendente: 'A pagar' },
     { id: 'variavel', nome: 'Despesa variável', tipo: 'saida', feito: 'Pago', pendente: 'A pagar' },
+    { id: 'cartao', nome: 'Cartão de crédito', tipo: 'saida', feito: 'Pago', pendente: 'A pagar' },
     { id: 'investimento', nome: 'Investimento', tipo: 'reserva', feito: 'Aplicado', pendente: 'A aplicar' },
     { id: 'poupanca', nome: 'Poupança', tipo: 'reserva', feito: 'Guardado', pendente: 'A guardar' },
   ];
@@ -101,7 +102,7 @@
    */
   function gerar(f, gerarId = novoId) {
     const base = {
-      desc: String(f.desc).trim(), obs: limparObs(f.obs), categoria: f.categoria, pago: false, criadoEm: Date.now(),
+      desc: String(f.desc).trim(), obs: limparObs(f.obs), categoria: f.categoria, provisao: f.provisao || null, pago: false, criadoEm: Date.now(),
     };
     if (f.recorrencia === 'unica' || !f.recorrencia) {
       return [{ ...base, id: gerarId(), grupo: null, parcela: null, centavos: f.centavos, ano: f.ano, mes: f.mes, dia: f.dia }];
@@ -143,6 +144,7 @@
     return lista.map((x) => {
       if (!ids.has(x.id)) return x;
       const novo = { ...x, desc: d.desc.trim(), obs: d.obs === undefined ? (x.obs || '') : limparObs(d.obs), centavos: d.centavos, categoria: d.categoria, dia: d.dia };
+      if (d.provisao !== undefined) novo.provisao = d.provisao || null;
       if (x.id === id && (escopo === 'este' || !x.grupo)) {
         novo.ano = d.ano; novo.mes = d.mes;
         if (x.grupo && !x.parcela) novo.grupo = null;
@@ -227,6 +229,7 @@
       id: String(x.id || novoId()), grupo: x.grupo ? String(x.grupo) : null, desc: String(x.desc || 'Sem descrição').slice(0, 120), obs: limparObs(x.obs),
       categoria: x.categoria, centavos, ano, mes, dia: Number.isInteger(dia) && dia >= 1 && dia <= 31 ? dia : 1,
       pago: !!x.pago, parcela: p, criadoEm: Number(x.criadoEm) || Date.now(),
+      provisao: x.provisao ? String(x.provisao).slice(0, 80) : null,
     };
   }
 
@@ -282,6 +285,64 @@
       });
     return '﻿' + linhas.join('\r\n');
   }
+
+  // ---------- provisões (previsão de gasto por mês) ----------
+  // Cada provisão vale para um mês. Provisões repetidas compartilham o mesmo `grupo`,
+  // e é o grupo que o lançamento guarda em `provisao`: assim as parcelas de uma compra
+  // consomem a provisão do mês de cada parcela.
+  // auto: consome também os lançamentos da categoria da provisão que não foram ligados a outra.
+
+  const MAX_PROVISOES = 1200;
+
+  function gerarProvisoes(f, gerarId = novoId) {
+    const n = f.repetir ? Math.max(1, Math.min(60, Math.floor(f.quantidade) || 1)) : 1;
+    const grupo = gerarId();
+    return Array.from({ length: n }, (_, i) => {
+      const { ano, mes } = somarMeses(f.ano, f.mes, i);
+      return {
+        id: i === 0 ? grupo : gerarId(), grupo, nome: String(f.nome).trim().slice(0, 80), centavos: f.centavos,
+        categoria: CAT[f.categoria]?.tipo === 'saida' ? f.categoria : null, auto: !!f.auto && CAT[f.categoria]?.tipo === 'saida',
+        obs: limparObs(f.obs), ano, mes, criadoEm: Date.now(),
+      };
+    });
+  }
+
+  function limparProvisao(x) {
+    if (!x || typeof x !== 'object') return null;
+    const ano = Number(x.ano), mes = Number(x.mes), centavos = Number(x.centavos);
+    if (!Number.isInteger(ano) || !Number.isInteger(mes) || mes < 0 || mes > 11) return null;
+    if (!Number.isInteger(centavos) || centavos <= 0 || centavos > 1e13) return null;
+    const nome = String(x.nome || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+    if (!nome) return null;
+    const categoria = CAT[x.categoria]?.tipo === 'saida' ? x.categoria : null;
+    const id = String(x.id || novoId()).slice(0, 80);
+    return {
+      id, grupo: String(x.grupo || id).slice(0, 80), nome, centavos, categoria, auto: !!x.auto && !!categoria,
+      obs: limparObs(x.obs), ano, mes, criadoEm: Number(x.criadoEm) || Date.now(),
+    };
+  }
+
+  /** Consumo das provisões de um mês: o que foi lançado nelas, quanto já foi pago e quanto resta. */
+  function consumoProvisoes(lancamentos, provisoes, ano, mes) {
+    const doMes = provisoes.filter((p) => p.ano === ano && p.mes === mes);
+    const grupos = new Set(doMes.map((p) => p.grupo));
+    const lancMes = lancamentos.filter((l) => l.ano === ano && l.mes === mes && CAT[l.categoria]?.tipo !== 'entrada');
+    const r = doMes.map((p) => {
+      const itens = lancMes.filter((l) => l.provisao === p.grupo
+        || (p.auto && l.categoria === p.categoria && !(l.provisao && grupos.has(l.provisao))));
+      const consumido = itens.reduce((a, l) => a + l.centavos, 0);
+      const pago = itens.filter((l) => l.pago).reduce((a, l) => a + l.centavos, 0);
+      return {
+        provisao: p, itens, consumido, pago, restante: Math.max(0, p.centavos - consumido),
+        excedente: Math.max(0, consumido - p.centavos), pct: Math.round((consumido / p.centavos) * 100),
+      };
+    });
+    return r.sort((a, b) => b.pct - a.pct);
+  }
+
+  /** Quanto ainda está reservado nas provisões do mês (previsto e ainda não lançado). */
+  const reservadoProvisoes = (lancamentos, provisoes, ano, mes) =>
+    consumoProvisoes(lancamentos, provisoes, ano, mes).reduce((a, c) => a + c.restante, 0);
 
   // ---------- planejamentos (tabelas livres: linhas × colunas) ----------
 
@@ -353,6 +414,7 @@
 
   return {
     LIMITES_PLANO, novoPlano, totaisPlano, limparPlano, csvPlano,
+    MAX_PROVISOES, gerarProvisoes, limparProvisao, consumoProvisoes, reservadoProvisoes,
     VERSAO_DADOS, CATEGORIAS, CAT, MESES, MESES_CURTOS,
     lerValor, moeda, moedaCurta, valorParaCampo, dividir,
     diasNoMes, somarMeses, chaveMes, dataDe, isoDe, lerIso, situacao,

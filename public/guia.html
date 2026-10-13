@@ -53,7 +53,7 @@
   <ol class="sumario">
     <li><span>01</span><div><b>Primeiro acesso</b><small>Entrar e criar a sua senha</small></div></li>
     <li><span>02</span><div><b>Vértice no celular</b><small>Deixar o app na tela inicial</small></div></li>
-    <li><span>03</span><div><b>A tela do mês</b><small>Saldo, o que falta pagar e seus lançamentos</small></div></li>
+    <li><span>03</span><div><b>A tela do mês</b><small>Saldo, o que falta pagar, provisões e seus lançamentos</small></div></li>
     <li><span>04</span><div><b>Fazendo lançamentos</b><small>Tipos, valor, vencimento e observações</small></div></li>
     <li><span>05</span><div><b>Contas que se repetem e parcelas</b><small>Lance uma vez, o Vértice distribui pelos meses</small></div></li>
     <li><span>06</span><div><b>Pagou? Marque.</b><small>Status, atrasados, filtros e busca</small></div></li>
@@ -122,7 +122,7 @@
 <section class="pagina">
   <span class="cap"><span>03</span> A tela do mês</span>
   <h2>Tudo do mês em um só lugar</h2>
-  <figure><img src="guia/img/03-mes.jpg" alt="Tela do mês com cartões de resumo e lista de lançamentos"></figure>
+  <figure class="recorte"><img src="guia/img/03-mes.jpg" alt="Tela do mês com cartões de resumo e lista de lançamentos" style="max-height:86mm"></figure>
   <table class="tab">
     <tr><th>Cartão</th><th>O que mostra</th></tr>
     <tr><td>Saldo previsto do mês</td><td>Receitas menos despesas e investimentos do mês. Embaixo, o <b>realizado até agora</b>: só o que já foi recebido e pago.</td></tr>
@@ -133,6 +133,13 @@
   <ul>
     <li>Use <b>‹ ›</b> no topo para ir a outros meses e <b>Hoje</b> para voltar ao mês atual.</li>
     <li>Se existir alguma conta atrasada, de qualquer mês, um <b>aviso vermelho</b> aparece no topo, com o total.</li>
+  </ul>
+  <h3>Provisões: quanto você pretende gastar</h3>
+  <p>Logo abaixo dos cartões ficam as <b>provisões do mês</b>, como "Mercado: R$ 1.200" ou "Compras parceladas: R$ 800". Toque em <b>Nova provisão</b> para criar uma, só para o mês ou para todos os meses.</p>
+  <ul>
+    <li>Ao lançar uma despesa, escolha em <b>Consome a provisão</b> de qual previsão ela sai. Numa compra parcelada, cada parcela consome a provisão do mês dela.</li>
+    <li>Marque <b>Contar automaticamente</b> para que todos os lançamentos de uma categoria (por exemplo, o cartão de crédito) entrem na provisão sozinhos.</li>
+    <li>Cada provisão mostra uma barra com o <b>quanto foi consumido</b>, quanto <b>resta</b> e quando <b>estourou</b>. O cartão de saldo mostra o valor <b>após provisões</b>.</li>
   </ul>
   <div class="rodape"><span>Guia do <b>Vértice</b></span><span>5</span></div>
 </section>
@@ -155,12 +162,13 @@
     </div>
     <figure style="margin-top:0"><img src="guia/img/04-novo-lancamento.jpg" alt="Formulário de novo lançamento preenchido"></figure>
   </div>
-  <h3>Os 5 tipos de lançamento</h3>
+  <h3>Os 6 tipos de lançamento</h3>
   <table class="tab">
     <tr><th>Tipo</th><th>Use para</th><th>Ao marcar fica</th></tr>
     <tr><td><span class="cat" style="--c:#2f855a">Receita</span></td><td>Salário, freelas, aluguel recebido, tudo o que entra</td><td><span class="tag ok">Recebido</span></td></tr>
     <tr><td><span class="cat" style="--c:#005ea4">Despesa fixa</span></td><td>Contas de valor parecido todo mês: aluguel, internet, escola</td><td><span class="tag ok">Pago</span></td></tr>
-    <tr><td><span class="cat" style="--c:#1499b4">Despesa variável</span></td><td>Contas que mudam: luz, mercado, compras, cartão</td><td><span class="tag ok">Pago</span></td></tr>
+    <tr><td><span class="cat" style="--c:#1499b4">Despesa variável</span></td><td>Contas que mudam: luz, mercado, farmácia</td><td><span class="tag ok">Pago</span></td></tr>
+    <tr><td><span class="cat" style="--c:#c2410c">Cartão de crédito</span></td><td>Compras no cartão, à vista ou parceladas</td><td><span class="tag ok">Pago</span></td></tr>
     <tr><td><span class="cat" style="--c:#5458d6">Investimento</span></td><td>Tesouro, CDB, ações, previdência</td><td><span class="tag ok">Aplicado</span></td></tr>
     <tr><td><span class="cat" style="--c:#b7791f">Poupança</span></td><td>Reserva de emergência, dinheiro guardado para um objetivo</td><td><span class="tag ok">Guardado</span></td></tr>
   </table>

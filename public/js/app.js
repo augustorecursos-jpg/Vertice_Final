@@ -73,7 +73,7 @@
 
   // ---------- servidor ----------
   let eu = null;                     // usuário logado
-  let dados = { lancamentos: [], planos: [] };   // lançamentos e planejamentos do usuário
+  let dados = { lancamentos: [], planos: [], provisoes: [] };   // lançamentos, planejamentos e provisões do usuário
   let rev = 0;                       // revisão dos dados no servidor
 
   async function api(metodo, url, corpo) {
@@ -106,11 +106,11 @@
       do {
         sinc.pendente = false;
         try {
-          rev = (await api('PUT', '/api/dados', { rev, lancamentos: dados.lancamentos, planos: dados.planos })).rev;
+          rev = (await api('PUT', '/api/dados', { rev, lancamentos: dados.lancamentos, planos: dados.planos, provisoes: dados.provisoes })).rev;
           marcarSinc('ok');
         } catch (e) {
           if (e.status === 409) {
-            rev = e.dados.rev; dados.lancamentos = e.dados.lancamentos; dados.planos = e.dados.planos || [];
+            rev = e.dados.rev; dados.lancamentos = e.dados.lancamentos; dados.planos = e.dados.planos || []; dados.provisoes = e.dados.provisoes || [];
             sinc.pendente = false; marcarSinc('ok'); render();
             toast('Seus dados mudaram em outro dispositivo. Carreguei a versão mais recente; confira a última alteração.', { erro: true, tempo: 9000 });
           } else if (e.status >= 400 && e.status < 500) {
@@ -129,7 +129,7 @@
     if (sinc.ocupado || sinc.estado !== 'ok' || $('.fundo-modal') || document.activeElement?.closest('#planos')) return;
     try {
       const d = await api('GET', '/api/dados');
-      if (d.rev !== rev && !sinc.ocupado) { rev = d.rev; dados.lancamentos = d.lancamentos; dados.planos = d.planos || []; render(); }
+      if (d.rev !== rev && !sinc.ocupado) { rev = d.rev; dados.lancamentos = d.lancamentos; dados.planos = d.planos || []; dados.provisoes = d.provisoes || []; render(); }
     } catch { /* tenta de novo na próxima vez */ }
   }
 
@@ -142,7 +142,7 @@
   const agora = new Date();
   const est = {
     secao: 'mes', ano: agora.getFullYear(), mes: agora.getMonth(),
-    filtro: 'todos', busca: '', ordem: prefs.ordem, abertas: new Set(),
+    filtro: 'todos', filtroProvisao: null, busca: '', ordem: prefs.ordem, abertas: new Set(),
   };
 
   // ---------- toast ----------
@@ -241,6 +241,21 @@
     f('f-valor').value = l.centavos != null ? N.valorParaCampo(l.centavos) : '';
     f('f-data').value = N.isoDe(l);
     f('f-obs').value = l.obs || '';
+    let provEscolhida = l.provisao || '';
+    function opcoesProvisao() {
+      const d = N.lerIso(f('f-data').value);
+      const tipo = CAT[$('input[name=cat]:checked', modal)?.value]?.tipo;
+      const atual = provEscolhida;
+      const doMes = d ? dados.provisoes.filter((p) => p.ano === d.ano && p.mes === d.mes) : [];
+      const grupos = new Map(doMes.map((p) => [p.grupo, p]));
+      if (atual && !grupos.has(atual) && nomeProvisao(atual)) grupos.set(atual, { nome: `${nomeProvisao(atual)} (outro mês)` });
+      f('f-prov').innerHTML = `<option value="">Nenhuma</option>${[...grupos].map(([g, p]) => `<option value="${esc(g)}">${esc(p.nome)}</option>`).join('')}`;
+      f('f-prov').value = grupos.has(atual) ? atual : '';
+      f('bloco-prov').hidden = tipo === 'entrada' || (!grupos.size);
+    }
+    f('f-prov').addEventListener('change', () => { provEscolhida = f('f-prov').value; });
+    modal.addEventListener('change', (e) => { if (e.target.name === 'cat' || e.target.id === 'f-data') opcoesProvisao(); });
+    opcoesProvisao();
     const contarObs = () => {
       const n = f('f-obs').value.length;
       f('c-obs').textContent = n > N.MAX_OBS * 0.8 ? `${n}/${N.MAX_OBS}` : '';
@@ -304,6 +319,7 @@
       e.preventDefault();
       const desc = f('f-desc').value.trim();
       const obs = f('f-obs').value.trim();
+      const provisao = f('bloco-prov').hidden ? null : (f('f-prov').value || null);
       const centavos = N.lerValor(f('f-valor').value);
       const data = N.lerIso(f('f-data').value);
       const okDesc = erro('desc', desc ? '' : 'Informe uma descrição.');
@@ -316,7 +332,7 @@
       if (existente) {
         const escopo = await escolherEscopo(existente, 'Editar');
         if (!escopo) return;
-        dados.lancamentos = N.editar(dados.lancamentos, existente.id, { desc, obs, centavos, categoria, ...data }, escopo);
+        dados.lancamentos = N.editar(dados.lancamentos, existente.id, { desc, obs, provisao, centavos, categoria, ...data }, escopo);
         fechar(); salvar();
         toast('Lançamento atualizado.');
         return;
@@ -325,7 +341,7 @@
       const rec = val('rec');
       const qtd = Math.floor(+f('f-qtd').value);
       if (rec !== 'unica' && !(qtd >= 2 && qtd <= 120)) { f('f-qtd').focus(); return toast('A quantidade deve ficar entre 2 e 120.', { erro: true }); }
-      const novos = N.gerar({ desc, obs, centavos, categoria, ...data, recorrencia: rec, quantidade: qtd, modoValor: val('modo') });
+      const novos = N.gerar({ desc, obs, provisao, centavos, categoria, ...data, recorrencia: rec, quantidade: qtd, modoValor: val('modo') });
       dados.lancamentos.push(...novos);
       fechar(); salvar();
       const msg = novos.length > 1 ? `${novos.length} lançamentos criados.` : 'Lançamento criado.';
@@ -429,9 +445,10 @@
 
   function renderMes() {
     const r = N.resumoMes(dados.lancamentos, est.ano, est.mes);
+    const reservado = N.reservadoProvisoes(dados.lancamentos, dados.provisoes, est.ano, est.mes);
     $('#cards-mes').innerHTML = [
       kpi({ classe: 'destaque' + (r.saldoPrevisto < 0 ? ' negativo' : ''), icone: 'carteira', rotulo: 'Saldo previsto do mês', valor: moeda(r.saldoPrevisto),
-        det: `Realizado até agora: <b>${moeda(r.saldoRealizado)}</b>` }),
+        det: `Realizado até agora: <b>${moeda(r.saldoRealizado)}</b>${reservado ? `<br>Após provisões: <b>${moeda(r.saldoPrevisto - reservado)}</b>` : ''}` }),
       kpi({ classe: 'vermelho', icone: 'relogio', rotulo: 'Falta pagar', valor: moeda(r.faltaPagar),
         det: r.saidas ? `${moeda(r.pago)} pagos de ${moeda(r.saidas)} · ${r.pctPago}%` : 'Nenhuma despesa no mês', barra: r.saidas ? r.pctPago : null }),
       kpi({ classe: 'verde', icone: 'sobe', rotulo: 'Receitas', valor: moeda(r.entradas),
@@ -449,6 +466,7 @@
         <button type="button" class="btn perigo peq" data-filtro="atrasados">Ver atrasados</button></div>`);
     }
     $('#aviso-atrasados').innerHTML = avisos.join('');
+    renderProvisoes();
 
     // filtros
     const doMes = dados.lancamentos.filter((l) => l.ano === est.ano && l.mes === est.mes);
@@ -464,11 +482,16 @@
     const filtroAtual = FILTROS.find((x) => x[0] === est.filtro);
     $('#filtros').innerHTML = FILTROS.map(([id, nome, fn]) =>
       `<button type="button" data-filtro="${id}" class="${est.filtro === id ? 'ativo' : ''}" aria-pressed="${est.filtro === id}">${nome}<b>${doMes.filter(fn).length}</b></button>`).join('')
-      + (atr.length ? `<button type="button" data-filtro="atrasados" class="alerta ${est.filtro === 'atrasados' ? 'ativo' : ''}" aria-pressed="${est.filtro === 'atrasados'}">Atrasados (todos os meses)<b>${atr.length}</b></button>` : '');
+      + (atr.length ? `<button type="button" data-filtro="atrasados" class="alerta ${est.filtro === 'atrasados' ? 'ativo' : ''}" aria-pressed="${est.filtro === 'atrasados'}">Atrasados (todos os meses)<b>${atr.length}</b></button>` : '')
+      + (est.filtroProvisao && est.filtro !== 'atrasados' && nomeProvisao(est.filtroProvisao) ? `<button type="button" class="ativo filtro-prov" data-prov-limpar title="Parar de filtrar pela provisão">${ic('alvo')} Provisão: ${esc(nomeProvisao(est.filtroProvisao))} ✕</button>` : '');
 
     let itens = est.filtro === 'atrasados' ? atr : doMes.filter(filtroAtual ? filtroAtual[2] : () => true);
+    const consumoFiltro = est.filtroProvisao && est.filtro !== 'atrasados'
+      ? N.consumoProvisoes(dados.lancamentos, dados.provisoes, est.ano, est.mes).find((c) => c.provisao.grupo === est.filtroProvisao) : null;
+    if (est.filtroProvisao && !consumoFiltro) est.filtroProvisao = null;
+    if (consumoFiltro) { const ids = new Set(consumoFiltro.itens.map((l) => l.id)); itens = itens.filter((l) => ids.has(l.id)); }
     const q = N.normalizar(est.busca.trim());
-    if (q) itens = itens.filter((l) => N.normalizar(`${l.desc} ${l.obs || ''} ${CAT[l.categoria].nome}`).includes(q));
+    if (q) itens = itens.filter((l) => N.normalizar(`${l.desc} ${l.obs || ''} ${CAT[l.categoria].nome} ${nomeProvisao(l.provisao) || ''}`).includes(q));
     const ord = {
       venc: (a, b) => N.dataDe(a) - N.dataDe(b) || a.pago - b.pago || b.centavos - a.centavos,
       maior: (a, b) => b.centavos - a.centavos,
@@ -514,7 +537,7 @@
           aria-label="${l.pago ? 'Desmarcar' : 'Marcar como ' + c.feito.toLowerCase()}: ${esc(l.desc)}" title="${l.pago ? 'Desmarcar' : 'Marcar como ' + c.feito.toLowerCase()}">${ic('check')}</button>
         <div class="data" aria-hidden="true"><b>${d.getDate()}</b><small>${MESES_CURTOS[d.getMonth()]}${outroMes ? ' ' + String(d.getFullYear()).slice(2) : ''}</small></div>
         <div class="desc"><b title="${esc(N.titulo(l))}">${esc(l.desc)}</b>
-          <div class="tags"><span class="tag quando neutra">${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span><span class="tag cat" data-cat="${l.categoria}">${esc(c.nome)}</span>${serie}${situ}</div>${l.obs ? `<div class="obs"><button type="button" data-acao="obs" aria-expanded="false" title="${esc(l.obs)}">${ic('nota')}<span>${esc(l.obs)}</span></button></div>` : ''}</div>
+          <div class="tags"><span class="tag quando neutra">${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span><span class="tag cat" data-cat="${l.categoria}">${esc(c.nome)}</span>${serie}${l.provisao && nomeProvisao(l.provisao) ? `<span class="tag prov-tag" title="Provisão">${ic('alvo')} ${esc(nomeProvisao(l.provisao))}</span>` : ''}${situ}</div>${l.obs ? `<div class="obs"><button type="button" data-acao="obs" aria-expanded="false" title="${esc(l.obs)}">${ic('nota')}<span>${esc(l.obs)}</span></button></div>` : ''}</div>
         <div class="valor">${c.tipo === 'entrada' ? '+ ' : ''}${moeda(l.centavos)}</div>
         <div class="acoes">
           <button type="button" class="btn fantasma icone peq" data-acao="editar" data-id="${esc(l.id)}" aria-label="Editar ${esc(l.desc)}" title="Editar">${ic('editar')}</button>
@@ -621,6 +644,177 @@
     $('#perfil-login').textContent = eu.login;
     const n = dados.lancamentos.length;
     $('#info-backup').textContent = `${n} ${n === 1 ? 'lançamento salvo' : 'lançamentos salvos'} na sua conta. Baixe uma cópia quando quiser guardar ou levar para uma planilha.`;
+  }
+
+  // ---------- provisões ----------
+  const nomeProvisao = (grupo) => dados.provisoes.find((p) => p.grupo === grupo)?.nome;
+
+  function renderProvisoes() {
+    const raiz = $('#provisoes');
+    const consumo = N.consumoProvisoes(dados.lancamentos, dados.provisoes, est.ano, est.mes);
+    const cab = `<div class="cartao-cab">
+        <div><h2><span class="bolha ciano"><i data-ic="alvo"></i></span> Provisões de ${esc(MESES[est.mes].toLowerCase())}</h2>
+        <p>Previsões de gasto e quanto delas já foi consumido. Ligue lançamentos e parcelas a uma provisão ao lançar.</p></div>
+        <button type="button" class="btn sec" data-prov="nova"><i data-ic="mais"></i> Nova provisão</button></div>`;
+    if (!consumo.length) {
+      raiz.innerHTML = `<div class="cartao provisoes vazia">${cab}
+        <p class="dica" style="margin:0">Exemplos: “Mercado” R$ 1.200 por mês, “Cartão de crédito” R$ 2.000 (contando tudo que for lançado no cartão) ou “Compras parceladas” R$ 800.</p></div>`;
+      hidratar(raiz);
+      return;
+    }
+    const total = consumo.reduce((a, c) => a + c.provisao.centavos, 0);
+    const usado = consumo.reduce((a, c) => a + c.consumido, 0);
+    const reservado = consumo.reduce((a, c) => a + c.restante, 0);
+    raiz.innerHTML = `<div class="cartao provisoes">${cab}
+      <div class="resumo-prov"><span>Previsto <b>${moeda(total)}</b></span><span>Consumido <b>${moeda(usado)}</b></span><span>Ainda reservado <b>${moeda(reservado)}</b></span></div>
+      <div class="lista-prov">${consumo.map((c) => {
+        const p = c.provisao;
+        const estado = c.excedente ? 'estourou' : c.pct >= 80 ? 'quase' : 'ok';
+        const serie = dados.provisoes.filter((x) => x.grupo === p.grupo).length > 1;
+        const filtrando = est.filtroProvisao === p.grupo;
+        return `<div class="prov ${estado}">
+          <div class="prov-topo">
+            <div class="prov-nome"><b>${esc(p.nome)}</b>
+              <span class="tags">${p.categoria ? `<span class="tag cat" data-cat="${p.categoria}">${esc(CAT[p.categoria].nome)}</span>` : ''}
+              ${p.auto ? `<span class="tag info" title="Conta automaticamente os lançamentos desta categoria">${ic('brilho')} automática</span>` : ''}
+              ${serie ? `<span class="tag info">${ic('repetir')} mensal</span>` : ''}</span></div>
+            <div class="prov-valores"><b>${moeda(c.consumido)}</b> <span class="suave">de ${moeda(p.centavos)}</span></div>
+          </div>
+          <div class="barra prov-barra" role="progressbar" aria-valuenow="${c.pct}" aria-valuemin="0" aria-valuemax="100" aria-label="Consumo de ${esc(p.nome)}"><span style="width:${Math.min(100, c.pct)}%"></span></div>
+          <div class="prov-rodape">
+            <span>${c.excedente ? `<b class="txt-erro">Estourou ${moeda(c.excedente)}</b>` : `Restam <b>${moeda(c.restante)}</b>`} · ${c.pct}% · ${c.itens.length} ${c.itens.length === 1 ? 'lançamento' : 'lançamentos'}${c.pago ? ` · pago ${moeda(c.pago)}` : ''}</span>
+            <span class="prov-acoes">
+              <button type="button" class="btn fantasma peq ${filtrando ? 'ativo' : ''}" data-prov="ver" data-id="${esc(p.id)}" aria-pressed="${filtrando}">${ic('lista')} ${filtrando ? 'Mostrando' : 'Ver'}</button>
+              <button type="button" class="btn fantasma icone peq" data-prov="editar" data-id="${esc(p.id)}" title="Editar provisão" aria-label="Editar provisão ${esc(p.nome)}">${ic('editar')}</button>
+              <button type="button" class="btn fantasma icone peq apagar" data-prov="excluir" data-id="${esc(p.id)}" title="Excluir provisão" aria-label="Excluir provisão ${esc(p.nome)}">${ic('lixo')}</button>
+            </span>
+          </div>
+          ${p.obs ? `<p class="prov-obs">${ic('nota')} ${esc(p.obs)}</p>` : ''}
+        </div>`;
+      }).join('')}</div></div>`;
+    hidratar(raiz);
+  }
+
+  /** Pergunta o escopo numa provisão repetida. */
+  function escopoProvisao(p, verbo) {
+    const qtd = dados.provisoes.filter((x) => x.grupo === p.grupo).length;
+    if (qtd < 2) return Promise.resolve('este');
+    return new Promise((ok) => {
+      const { fundo, fechar } = abrirModal(`
+        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="t-escp">
+          <div class="cab-modal"><h2 id="t-escp">${esc(verbo)} provisão mensal</h2>
+            <button type="button" class="btn fantasma icone" data-fechar aria-label="Fechar"><i data-ic="x"></i></button></div>
+          <p class="suave" style="margin-top:0">“${esc(p.nome)}” se repete em ${qtd} meses.</p>
+          <div class="opcoes-escopo">
+            <button type="button" class="btn sec" data-esc="este"><span>Só este mês<small>${esc(MESES[p.mes])} de ${p.ano}</small></span></button>
+            <button type="button" class="btn sec" data-esc="proximos"><span>Este e os próximos<small>A partir de ${esc(MESES[p.mes].toLowerCase())} de ${p.ano}</small></span></button>
+            <button type="button" class="btn sec" data-esc="todos"><span>Todos os meses<small>As ${qtd} provisões</small></span></button>
+          </div>
+        </div>`, { estreito: true });
+      fundo.addEventListener('cancelado', () => ok(null));
+      $$('[data-esc]', fundo).forEach((b) => b.addEventListener('click', () => { fechar(); ok(b.dataset.esc); }));
+    });
+  }
+
+  function formProvisao(existente = null) {
+    const p = existente || { nome: '', centavos: null, categoria: null, auto: false, obs: '', ano: est.ano, mes: est.mes };
+    const saidas = CATEGORIAS.filter((c) => c.tipo === 'saida');
+    const { modal, fechar } = abrirModal(`
+      <form class="modal" role="dialog" aria-modal="true" aria-labelledby="t-prov" novalidate autocomplete="off">
+        <div class="cab-modal"><h2 id="t-prov">${existente ? 'Editar provisão' : 'Nova provisão'}</h2>
+          <button type="button" class="btn fantasma icone" data-fechar aria-label="Fechar"><i data-ic="x"></i></button></div>
+        <div class="grade-form">
+          <div class="inteiro"><label class="rotulo" for="p-nome">Nome</label>
+            <input type="text" id="p-nome" maxlength="80" placeholder="Ex.: Mercado, Cartão de crédito, Compras parceladas" value="${esc(p.nome)}"></div>
+          <div><label class="rotulo" for="p-valor">Valor previsto</label>
+            <div class="campo-valor"><span>R$</span><input type="text" id="p-valor" inputmode="decimal" placeholder="0,00" value="${p.centavos ? esc(N.valorParaCampo(p.centavos)) : ''}"></div></div>
+          <div><label class="rotulo" for="p-mes">Mês</label>
+            <input type="month" id="p-mes" value="${p.ano}-${String(p.mes + 1).padStart(2, '0')}" ${existente && dados.provisoes.filter((x) => x.grupo === p.grupo).length > 1 ? 'disabled title="Em provisões mensais o mês não muda"' : ''}></div>
+          <div class="inteiro"><label class="rotulo" for="p-cat">Categoria <small>(opcional)</small></label>
+            <select id="p-cat"><option value="">Qualquer despesa</option>${saidas.map((c) => `<option value="${c.id}" ${p.categoria === c.id ? 'selected' : ''}>${esc(c.nome)}</option>`).join('')}</select></div>
+          <label class="inteiro check-linha" id="p-auto-linha"><input type="checkbox" id="p-auto" ${p.auto ? 'checked' : ''}>
+            <span><b>Contar automaticamente</b> todos os lançamentos desta categoria no mês<small>Os que você ligar a outra provisão não entram.</small></span></label>
+          ${existente ? '' : `<fieldset class="inteiro pilulas"><legend class="rotulo" style="padding:0;margin-bottom:.45em">Repetição</legend>
+            <label><input type="radio" name="p-rep" value="nao" checked><span>Só este mês</span></label>
+            <label><input type="radio" name="p-rep" value="sim"><span>Todo mês</span></label></fieldset>
+          <div id="p-qtd-bloco" hidden><label class="rotulo" for="p-qtd">Por quantos meses?</label><input type="number" id="p-qtd" min="2" max="60" value="12"></div>`}
+          <div class="inteiro"><label class="rotulo" for="p-obs">Observações <small>(opcional)</small></label>
+            <textarea id="p-obs" rows="2" maxlength="1000" placeholder="Ex.: inclui feira e padaria">${esc(p.obs || '')}</textarea></div>
+        </div>
+        <p class="erro-campo" id="p-erro" role="alert"></p>
+        <div class="rodape-modal"><button type="button" class="btn sec" data-fechar>Cancelar</button>
+          <button class="btn">${ic('check')} ${existente ? 'Salvar' : 'Criar provisão'}</button></div>
+      </form>`, { estreito: true });
+    const f = (id) => $('#' + id, modal);
+    const atualizar = () => {
+      f('p-auto-linha').hidden = !f('p-cat').value;
+      if (f('p-qtd-bloco')) f('p-qtd-bloco').hidden = $('input[name=p-rep]:checked', modal).value !== 'sim';
+    };
+    modal.addEventListener('change', atualizar);
+    atualizar();
+    f('p-nome').focus();
+    modal.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const nome = f('p-nome').value.trim();
+      const centavos = N.lerValor(f('p-valor').value);
+      const [a, m] = f('p-mes').value.split('-').map(Number);
+      const erro = (t) => { f('p-erro').textContent = t; };
+      if (!nome) return erro('Dê um nome para a provisão.');
+      if (!(centavos > 0)) return erro('Informe o valor previsto, por exemplo 1.200,00.');
+      if (!a || !m) return erro('Escolha o mês.');
+      const categoria = f('p-cat').value || null;
+      const auto = !!categoria && f('p-auto').checked;
+      const obs = f('p-obs').value.trim();
+      const antes = dados.provisoes;
+      if (existente) {
+        const escopo = await escopoProvisao(existente, 'Editar');
+        if (!escopo) return;
+        const k = N.chaveMes(existente.ano, existente.mes);
+        dados.provisoes = dados.provisoes.map((x) => {
+          const alvo = x.id === existente.id || (x.grupo === existente.grupo && (escopo === 'todos' || (escopo === 'proximos' && N.chaveMes(x.ano, x.mes) >= k)));
+          if (!alvo) return x;
+          const novo = { ...x, nome, centavos, categoria, auto, obs };
+          if (x.id === existente.id && escopo === 'este' && !f('p-mes').disabled) { novo.ano = a; novo.mes = m - 1; }
+          return novo;
+        });
+      } else {
+        const repetir = $('input[name=p-rep]:checked', modal).value === 'sim';
+        const quantidade = Math.floor(+f('p-qtd').value);
+        if (repetir && !(quantidade >= 2 && quantidade <= 60)) return erro('Escolha entre 2 e 60 meses.');
+        dados.provisoes = [...dados.provisoes, ...N.gerarProvisoes({ nome, centavos, categoria, auto, obs, ano: a, mes: m - 1, repetir, quantidade })];
+      }
+      fechar(); salvar();
+      toast(existente ? 'Provisão atualizada.' : 'Provisão criada.', { acao: () => { dados.provisoes = antes; salvar(); } });
+      if (!existente && (a !== est.ano || m - 1 !== est.mes)) toast(`A provisão começa em ${MESES[m - 1].toLowerCase()}/${a}.`, { rotulo: 'Ver', acao: () => irPara(a, m - 1) });
+    });
+  }
+
+  async function acaoProvisao(acao, id) {
+    if (acao === 'nova') return formProvisao();
+    const p = dados.provisoes.find((x) => x.id === id);
+    if (!p) return;
+    if (acao === 'editar') return formProvisao(p);
+    if (acao === 'ver') {
+      est.filtroProvisao = est.filtroProvisao === p.grupo ? null : p.grupo;
+      if (est.filtro === 'atrasados') est.filtro = 'todos';
+      render();
+      if (est.filtroProvisao) $('#lista').closest('.cartao').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    if (acao === 'excluir') {
+      const escopo = await escopoProvisao(p, 'Excluir');
+      if (!escopo) return;
+      const k = N.chaveMes(p.ano, p.mes);
+      const antes = { provisoes: dados.provisoes, lancamentos: dados.lancamentos };
+      dados.provisoes = dados.provisoes.filter((x) => !(x.id === p.id || (x.grupo === p.grupo && (escopo === 'todos' || (escopo === 'proximos' && N.chaveMes(x.ano, x.mes) >= k)))));
+      // Sem nenhuma provisão do grupo, os lançamentos deixam de apontar para ela.
+      if (!dados.provisoes.some((x) => x.grupo === p.grupo)) {
+        dados.lancamentos = dados.lancamentos.map((l) => (l.provisao === p.grupo ? { ...l, provisao: null } : l));
+        if (est.filtroProvisao === p.grupo) est.filtroProvisao = null;
+      }
+      salvar();
+      toast('Provisão excluída. Os lançamentos continuam.', { acao: () => { dados.provisoes = antes.provisoes; dados.lancamentos = antes.lancamentos; salvar(); } });
+    }
   }
 
   // ---------- planejamentos ----------
@@ -1162,7 +1356,9 @@
     if (alvo.matches('[data-trocar-senha]')) return trocarSenha();
     if (alvo.matches('[data-novo-usuario]')) return formUsuario();
     if (alvo.dataset.usr) return acaoUsuario(alvo.dataset.usr, Number(alvo.dataset.uid));
-    if (alvo.matches('[data-limpar-filtro]')) { est.filtro = 'todos'; est.busca = ''; $('#busca').value = ''; return render(); }
+    if (alvo.matches('[data-limpar-filtro]')) { est.filtro = 'todos'; est.filtroProvisao = null; est.busca = ''; $('#busca').value = ''; return render(); }
+    if (alvo.matches('[data-prov-limpar]')) { est.filtroProvisao = null; return render(); }
+    if (alvo.dataset.prov) return acaoProvisao(alvo.dataset.prov, alvo.dataset.id);
     if (alvo.dataset.filtro) { est.filtro = est.filtro === alvo.dataset.filtro && alvo.dataset.filtro !== 'todos' ? 'todos' : alvo.dataset.filtro; return render(); }
     if (alvo.dataset.abrir) {
       const id = alvo.dataset.abrir;
@@ -1229,7 +1425,7 @@
   (async function iniciar() {
     try {
       const [usuario, d] = await Promise.all([api('GET', '/api/eu'), api('GET', '/api/dados')]);
-      eu = usuario; rev = d.rev; dados.lancamentos = d.lancamentos; dados.planos = d.planos || [];
+      eu = usuario; rev = d.rev; dados.lancamentos = d.lancamentos; dados.planos = d.planos || []; dados.provisoes = d.provisoes || [];
     } catch (e) {
       $('#carregando').innerHTML = `<div>${ic('alerta')}<h3>Não foi possível carregar seus dados</h3><p>${esc(e.message)}</p>
         <button type="button" class="btn" id="tentar">Tentar de novo</button></div>`;
