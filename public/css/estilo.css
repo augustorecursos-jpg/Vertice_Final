@@ -343,6 +343,79 @@ table.t tr:last-child td { border-bottom: 0; }
 .atalhos-cartao button:hover { border-color: #e9a07f; color: #c2410c; }
 .atalhos-cartao button.ativo { background: #fff1ea; border-color: #c2410c; color: #c2410c; }
 
+/* ---------- dashboard ---------- */
+.dash-cab { display: flex; justify-content: space-between; align-items: center; gap: 1em; flex-wrap: wrap; }
+.dash-cab h2 { margin: 0; display: flex; align-items: center; gap: .55em; }
+.dash-cab p { margin: .25em 0 0; color: var(--suave); font-size: .9rem; }
+.alternar { display: inline-flex; background: var(--claro-100); border-radius: 12px; padding: .2em; }
+.alternar button { border: 0; background: transparent; font: inherit; font-weight: 800; color: var(--marinho-800); padding: .45em 1.1em; border-radius: 10px; cursor: pointer; }
+.alternar button.ativo { background: var(--papel); box-shadow: var(--sombra-1); }
+.dash-cards { grid-template-columns: 1.25fr repeat(4, 1fr); }
+.dash-kpi .val { font-variant-numeric: normal; font-size: clamp(1.15rem, 1.55vw, 1.5rem); overflow-wrap: anywhere; }
+.dash-kpi.destaque .val { font-size: clamp(1.4rem, 2vw, 1.9rem); }
+.dash-kpi .rot { position: relative; z-index: 1; }
+.dash-kpi .det { display: flex; flex-wrap: wrap; gap: .25em; align-items: center; }
+.delta { display: inline-flex; align-items: center; gap: .2em; font-weight: 700; }
+.delta svg.ic { width: 1em; height: 1em; }
+.delta.bom { color: var(--verde); }
+.delta.ruim { color: var(--vermelho); }
+.delta.neutro { color: var(--suave); font-weight: 400; }
+.kpi.destaque .delta.bom { color: #8ee0b5; }
+.kpi.destaque .delta.ruim { color: #ffb4ab; }
+.kpi.destaque .delta.neutro { color: rgba(226, 238, 250, .75); }
+.dash-grade { display: grid; grid-template-columns: 1.35fr 1fr; gap: 1.2em; align-items: start; }
+.dash-grade > .cartao, .dash-coluna .cartao { margin: 0; }
+.dash-coluna { display: grid; gap: 1.2em; }
+.dash-grade .cartao-cab h2 { font-size: 1.05rem; }
+table.tab-dash { width: 100%; border-collapse: collapse; font-size: .9rem; }
+table.tab-dash th, table.tab-dash td { padding: .45em .4em; text-align: left; font-weight: 400; }
+table.tab-dash thead th { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--suave); font-weight: 700; border-bottom: 1px solid var(--borda); }
+table.tab-dash tbody th { color: var(--texto); white-space: nowrap; }
+table.tab-dash .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+table.tab-dash .pct { color: var(--suave); font-size: .82rem; width: 4.5em; }
+table.tab-dash tr.grupo-cat th, table.tab-dash tr.grupo-cat td { font-family: var(--titulo); font-weight: 800; color: var(--marinho-900); padding-top: .9em; border-bottom: 1px solid var(--borda); }
+table.tab-dash tr.grupo-cat:first-child th, table.tab-dash tr.grupo-cat:first-child td { padding-top: .5em; }
+table.tab-dash tfoot th, table.tab-dash tfoot td { border-top: 2px solid var(--borda); font-weight: 800; color: var(--marinho-900); padding-top: .7em; }
+.chave { display: inline-block; width: .7em; height: .7em; border-radius: 3px; background: var(--cor); margin-right: .5em; vertical-align: -.05em; }
+.col-barra { width: 45%; }
+.trilho { display: block; height: 14px; }
+.barra-cat { display: block; height: 100%; min-width: 0; background: var(--cor); border-radius: 0 4px 4px 0; cursor: default; transition: filter .12s; }
+.barra-cat:hover, .barra-cat:focus-visible, .pilha span:hover, .pilha span:focus-visible { filter: brightness(1.15); outline: none; }
+.pilha { display: flex; gap: 2px; height: 22px; border-radius: 6px; overflow: hidden; background: var(--papel); }
+.pilha span { background: var(--cor); min-width: 3px; cursor: default; }
+.legenda-dash { list-style: none; padding: 0; margin: .9em 0 0; display: grid; gap: .45em; font-size: .9rem; }
+.legenda-dash li { display: flex; align-items: center; gap: .3em; }
+.legenda-dash li b { margin-left: auto; font-variant-numeric: tabular-nums; }
+.legenda-dash li .suave { width: 3em; text-align: right; font-size: .82rem; }
+.medidor { height: 14px; border-radius: 99px; background: var(--claro-200); overflow: hidden; }
+.medidor span { display: block; height: 100%; background: var(--primaria); border-radius: 99px; }
+.medidor-leg { display: flex; justify-content: space-between; gap: 1em; flex-wrap: wrap; margin-top: .6em; font-size: .88rem; color: var(--suave); }
+.medidor-leg b { color: var(--marinho-900); }
+.maiores { list-style: none; counter-reset: m; padding: 0; margin: 0; }
+.maiores li { counter-increment: m; display: flex; align-items: center; gap: .8em; padding: .55em 0; border-bottom: 1px dashed var(--borda); }
+.maiores li:last-child { border-bottom: 0; }
+.maiores li::before { content: counter(m); width: 1.7em; height: 1.7em; border-radius: 50%; display: grid; place-items: center; background: var(--claro-100); color: var(--marinho-800); font-weight: 800; font-size: .8rem; flex: none; }
+.maiores .desc { flex: 1; min-width: 0; }
+.maiores .desc b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.maiores .desc small { display: flex; gap: .4em; align-items: center; margin-top: .15em; color: var(--suave); }
+.maiores .num { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tip-graf { position: fixed; z-index: 300; pointer-events: none; background: var(--marinho-950); color: #fff; border-radius: 10px; padding: .5em .75em; box-shadow: var(--sombra-3); display: grid; gap: .05em; font-size: .82rem; max-width: 260px; }
+.tip-graf b { font-family: var(--titulo); font-size: 1rem; }
+.tip-graf span { color: rgba(226, 238, 250, .9); }
+.tip-graf small { color: rgba(226, 238, 250, .7); }
+@media (max-width: 1100px) {
+  .dash-cards { grid-template-columns: repeat(2, 1fr); }
+  .dash-cards .kpi.destaque { grid-column: 1 / -1; }
+  .dash-grade { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+  .dash-categorias .col-barra, .dash-categorias thead th:nth-child(2) { display: none; }
+  .col-barra { width: 40%; }
+  table.tab-dash tbody th, table.tab-dash tfoot th { white-space: normal; }
+  .dash-kpi .val { font-size: 1.25rem; }
+  .dash-kpi.destaque .val { font-size: 1.7rem; }
+}
+
 /* ---------- provisões ---------- */
 .provisoes .cartao-cab { margin-bottom: .8em; }
 .resumo-prov { display: flex; gap: .4em 1.4em; flex-wrap: wrap; font-size: .88rem; color: var(--suave); margin-bottom: .9em; }

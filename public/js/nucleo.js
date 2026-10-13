@@ -225,6 +225,51 @@
     return { cats, saldo, entradas, saidas, acumulado, total: soma };
   }
 
+  // ---------- dashboard ----------
+
+  /** Totais de um período: mês (mes 0–11) ou ano inteiro (mes = null). */
+  function painel(lista, ano, mes = null) {
+    const itens = lista.filter((l) => l.ano === ano && (mes == null || l.mes === mes));
+    const porCategoria = Object.fromEntries(CATEGORIAS.map((c) => [c.id, 0]));
+    const qtdCategoria = Object.fromEntries(CATEGORIAS.map((c) => [c.id, 0]));
+    const cartoes = new Map();
+    let pagoDespesas = 0;
+    for (const l of itens) {
+      if (!(l.categoria in porCategoria)) continue;
+      porCategoria[l.categoria] += l.centavos;
+      qtdCategoria[l.categoria]++;
+      if (CAT[l.categoria].tipo === 'saida' && l.pago) pagoDespesas += l.centavos;
+      if (l.categoria === 'cartao') {
+        const nome = (l.cartao || '').trim() || 'Sem cartão definido';
+        const k = normalizarTexto(nome);
+        const c = cartoes.get(k) || { nome, total: 0, qtd: 0 };
+        c.total += l.centavos; c.qtd++;
+        cartoes.set(k, c);
+      }
+    }
+    const soma = (tipo) => CATEGORIAS.filter((c) => c.tipo === tipo).reduce((a, c) => a + porCategoria[c.id], 0);
+    const receitas = soma('entrada'), despesas = soma('saida'), reservas = soma('reserva');
+    const pct = (v, base) => (base > 0 ? Math.round((v / base) * 100) : null);
+    return {
+      ano, mes, qtd: itens.length, porCategoria, qtdCategoria, receitas, despesas, reservas,
+      saldo: receitas - despesas - reservas,
+      taxaPoupanca: pct(reservas, receitas),
+      comprometido: pct(despesas, receitas),
+      pagoDespesas, abertoDespesas: despesas - pagoDespesas,
+      cartoes: [...cartoes.values()].sort((a, b) => b.total - a.total),
+      maiores: itens.filter((l) => CAT[l.categoria]?.tipo === 'saida').sort((a, b) => b.centavos - a.centavos).slice(0, 5),
+    };
+  }
+
+  /** Período anterior para comparação: mês anterior ou ano anterior. */
+  function periodoAnterior(ano, mes = null) {
+    if (mes == null) return { ano: ano - 1, mes: null };
+    return somarMeses(ano, mes, -1);
+  }
+
+  /** Variação percentual entre dois valores (null quando não há base). */
+  const variacao = (atual, anterior) => (anterior > 0 ? Math.round(((atual - anterior) / anterior) * 100) : null);
+
   // ---------- busca ----------
 
   const normalizar = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -429,7 +474,7 @@
 
   return {
     LIMITES_PLANO, novoPlano, totaisPlano, limparPlano, csvPlano,
-    CARTOES_SUGERIDOS, mesmoCartao,
+    CARTOES_SUGERIDOS, mesmoCartao, painel, periodoAnterior, variacao,
     MAX_PROVISOES, gerarProvisoes, limparProvisao, consumoProvisoes, reservadoProvisoes,
     VERSAO_DADOS, CATEGORIAS, CAT, MESES, MESES_CURTOS,
     lerValor, moeda, moedaCurta, valorParaCampo, dividir,

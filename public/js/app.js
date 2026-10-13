@@ -44,6 +44,7 @@
     dinheiro: '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/>',
     email: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>',
     cartao: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h2M11 15h3"/>',
+    pizza: '<path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/>',
     alvo: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
     brilho: '<path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/>',
     nota: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
@@ -143,7 +144,7 @@
   const agora = new Date();
   const est = {
     secao: 'mes', ano: agora.getFullYear(), mes: agora.getMonth(),
-    filtro: 'todos', filtroProvisao: null, filtroCartao: null, busca: '', ordem: prefs.ordem, abertas: new Set(),
+    filtro: 'todos', filtroProvisao: null, filtroCartao: null, painelAno: false, busca: '', ordem: prefs.ordem, abertas: new Set(),
   };
 
   // ---------- toast ----------
@@ -410,13 +411,16 @@
     if (est.secao !== 'mes') location.hash = '#mes'; else render();
   }
   function mover(delta) {
-    if (est.secao === 'ano') { est.ano += delta; return render(); }
+    if (anual()) { est.ano += delta; return render(); }
+    // Troca o mês sem sair da tela atual (Mês ou Dashboard).
     const r = N.somarMeses(est.ano, est.mes, delta);
-    irPara(r.ano, r.mes);
+    est.ano = r.ano; est.mes = r.mes;
+    if (est.filtro === 'atrasados') est.filtro = 'todos';
+    render();
   }
   function lerHash() {
     const [s, sub] = location.hash.replace('#', '').split('/');
-    est.secao = ['mes', 'ano', 'planos', 'ajustes'].includes(s) || (s === 'usuarios' && eu?.perfil === 'admin') ? s : 'mes';
+    est.secao = ['mes', 'dashboard', 'ano', 'planos', 'ajustes'].includes(s) || (s === 'usuarios' && eu?.perfil === 'admin') ? s : 'mes';
     est.plano = s === 'planos' && sub ? decodeURIComponent(sub) : null;
     render();
     window.scrollTo({ top: 0 });
@@ -430,6 +434,7 @@
     renderTopo();
     if (est.secao === 'mes') renderMes();
     if (est.secao === 'ano') renderAno();
+    if (est.secao === 'dashboard') renderDashboard();
     if (est.secao === 'ajustes') renderAjustes();
     if (est.secao === 'usuarios') renderUsuarios();
     if (est.secao === 'planos') renderPlanos();
@@ -447,8 +452,8 @@
     $('#hoje').textContent = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
     $('#nome-usuario').textContent = nome || 'Você';
     $('#av-usuario').textContent = (nome || 'V').split(/\s+/).map((p) => p[0]).slice(0, 2).join('').toUpperCase();
-    const ano = est.secao === 'ano';
-    const comPeriodo = ['mes', 'ano'].includes(est.secao);
+    const ano = anual();
+    const comPeriodo = ['mes', 'dashboard', 'ano'].includes(est.secao);
     $('.topo .mes').hidden = !comPeriodo;
     $('#btn-hoje').hidden = !comPeriodo;
     $('.topo').classList.toggle('sem-periodo', !comPeriodo);
@@ -685,6 +690,144 @@
     $('#perfil-login').textContent = eu.login;
     const n = dados.lancamentos.length;
     $('#info-backup').textContent = `${n} ${n === 1 ? 'lançamento salvo' : 'lançamentos salvos'} na sua conta. Baixe uma cópia quando quiser guardar ou levar para uma planilha.`;
+  }
+
+  // ---------- dashboard ----------
+  const anual = () => est.secao === 'ano' || (est.secao === 'dashboard' && est.painelAno);
+  const pctTxt = (v) => (v == null ? '–' : `${v}%`);
+
+  function renderDashboard() {
+    const raiz = $('#dashboard');
+    const mes = est.painelAno ? null : est.mes;
+    const p = N.painel(dados.lancamentos, est.ano, mes);
+    const ant = N.periodoAnterior(est.ano, mes);
+    const pa = N.painel(dados.lancamentos, ant.ano, ant.mes);
+    const nomePeriodo = mes == null ? String(est.ano) : `${MESES[mes].toLowerCase()} de ${est.ano}`;
+    const nomeAnterior = ant.mes == null ? String(ant.ano) : MESES_CURTOS[ant.mes].toLowerCase();
+
+    // Variação colorida pelo que é bom: subir é bom para receitas/reservas/saldo, ruim para despesas.
+    const delta = (atual, anterior, subirEhBom = true) => {
+      const v = N.variacao(atual, anterior);
+      if (v == null || !anterior) return `<span class="delta neutro">sem base em ${esc(nomeAnterior)}</span>`;
+      if (v === 0) return `<span class="delta neutro">= ${esc(nomeAnterior)}</span>`;
+      const bom = (v > 0) === subirEhBom;
+      return `<span class="delta ${bom ? 'bom' : 'ruim'}">${ic(v > 0 ? 'sobe' : 'desce')} ${v > 0 ? '+' : ''}${v}% vs ${esc(nomeAnterior)}</span>`;
+    };
+    const tile = ({ classe = '', rotulo, valor, det = '' }) =>
+      `<div class="kpi dash-kpi ${classe}"><span class="rot">${esc(rotulo)}</span><div class="val">${valor}</div><div class="det">${det}</div></div>`;
+
+    const vazio = !p.qtd;
+    const max = Math.max(1, ...CATEGORIAS.map((c) => p.porCategoria[c.id]));
+    const linhaCat = (c) => {
+      const v = p.porCategoria[c.id];
+      const pr = p.receitas ? Math.round((v / p.receitas) * 100) : null;
+      const tip = `${c.nome}|${moeda(v)}|${p.qtdCategoria[c.id]} ${p.qtdCategoria[c.id] === 1 ? 'lançamento' : 'lançamentos'}${pr != null && c.tipo !== 'entrada' ? ` · ${pr}% das receitas` : ''}`;
+      return `<tr data-cat="${c.id}">
+        <th scope="row"><span class="chave"></span>${esc(c.nome)}</th>
+        <td class="col-barra"><span class="trilho"><span class="barra-cat" style="width:${v ? Math.max(1.5, (v / max) * 100) : 0}%" data-tip="${esc(tip)}" tabindex="${v ? 0 : -1}"></span></span></td>
+        <td class="num">${v ? moeda(v) : '<span class="suave">–</span>'}</td>
+        <td class="num pct">${c.tipo === 'entrada' || pr == null || !v ? '' : `${pr}%`}</td>
+      </tr>`;
+    };
+    const grupo = (titulo, tipo, total) => `<tr class="grupo-cat"><th scope="rowgroup">${esc(titulo)}</th><td class="col-barra"></td><td class="num">${moeda(total)}</td><td class="num pct">${tipo !== 'entrada' && p.receitas ? pctTxt(Math.round((total / p.receitas) * 100)) : ''}</td></tr>
+      ${CATEGORIAS.filter((c) => c.tipo === tipo).map(linhaCat).join('')}`;
+
+    const despCats = CATEGORIAS.filter((c) => c.tipo === 'saida');
+    const composicao = p.despesas ? `<div class="pilha" role="img" aria-label="Composição das despesas">${despCats.filter((c) => p.porCategoria[c.id]).map((c) => {
+      const v = p.porCategoria[c.id];
+      return `<span data-cat="${c.id}" style="flex:${v} 1 0" data-tip="${esc(`${c.nome}|${moeda(v)}|${Math.round((v / p.despesas) * 100)}% das despesas`)}" tabindex="0"></span>`;
+    }).join('')}</div>
+      <ul class="legenda-dash">${despCats.map((c) => `<li data-cat="${c.id}"><span class="chave"></span>${esc(c.nome)} <b>${moeda(p.porCategoria[c.id])}</b> <span class="suave">${Math.round((p.porCategoria[c.id] / p.despesas) * 100)}%</span></li>`).join('')}</ul>`
+      : '<p class="suave">Nenhuma despesa no período.</p>';
+
+    const maxCartao = Math.max(1, ...p.cartoes.map((c) => c.total));
+    const cartoes = p.cartoes.length ? `<table class="tab-dash"><tbody>${p.cartoes.map((c) => `<tr data-cat="cartao">
+        <th scope="row">${esc(c.nome)}</th>
+        <td class="col-barra"><span class="trilho"><span class="barra-cat" style="width:${Math.max(1.5, (c.total / maxCartao) * 100)}%" data-tip="${esc(`${c.nome}|${moeda(c.total)}|${c.qtd} ${c.qtd === 1 ? 'lançamento' : 'lançamentos'}`)}" tabindex="0"></span></span></td>
+        <td class="num">${moeda(c.total)}</td></tr>`).join('')}</tbody></table>`
+      : '<p class="suave">Nenhum gasto no cartão no período.</p>';
+
+    const pctPago = p.despesas ? Math.round((p.pagoDespesas / p.despesas) * 100) : 0;
+    const maiores = p.maiores.length ? `<ol class="maiores">${p.maiores.map((l) => `<li><span class="desc"><b>${esc(N.titulo(l))}</b>
+        <small><span class="tag cat" data-cat="${l.categoria}">${esc(nomeCategoria(l.categoria, l.cartao))}</span>${mes == null ? ` ${N.dataDe(l).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}` : ''}</small></span>
+        <b class="num">${moeda(l.centavos)}</b></li>`).join('')}</ol>`
+      : '<p class="suave">Nenhuma despesa no período.</p>';
+
+    raiz.innerHTML = `
+      <div class="cartao dash-cab">
+        <div><h2><span class="bolha"><i data-ic="painel"></i></span> Dashboard de ${esc(nomePeriodo)}</h2>
+          <p>${vazio ? 'Nenhum lançamento neste período.' : `${p.qtd} ${p.qtd === 1 ? 'lançamento' : 'lançamentos'} · comparação com ${esc(ant.mes == null ? String(ant.ano) : `${MESES[ant.mes].toLowerCase()}`)}`}</p></div>
+        <div class="alternar" role="group" aria-label="Período">
+          <button type="button" data-periodo="mes" aria-pressed="${!est.painelAno}" class="${est.painelAno ? '' : 'ativo'}">Mês</button>
+          <button type="button" data-periodo="ano" aria-pressed="${!!est.painelAno}" class="${est.painelAno ? 'ativo' : ''}">Ano</button>
+        </div>
+      </div>
+      <div class="cards dash-cards">
+        ${tile({ classe: 'destaque' + (p.saldo < 0 ? ' negativo' : ''), rotulo: 'Saldo do período', valor: moeda(p.saldo), det: delta(p.saldo, pa.saldo) })}
+        ${tile({ classe: 'verde', rotulo: 'Receitas', valor: moeda(p.receitas), det: delta(p.receitas, pa.receitas) })}
+        ${tile({ classe: 'vermelho', rotulo: 'Despesas', valor: moeda(p.despesas), det: `${p.comprometido != null ? `${p.comprometido}% das receitas · ` : ''}${delta(p.despesas, pa.despesas, false)}` })}
+        ${tile({ classe: 'indigo', rotulo: 'Investido e poupado', valor: moeda(p.reservas), det: delta(p.reservas, pa.reservas) })}
+        ${tile({ classe: 'ciano', rotulo: 'Taxa de poupança', valor: pctTxt(p.taxaPoupanca), det: 'do que entrou foi investido ou poupado' })}
+      </div>
+      <div class="dash-grade">
+        <div class="cartao dash-categorias">
+          <div class="cartao-cab"><div><h2>Total por categoria</h2><p>Valores do período e quanto cada um representa das receitas.</p></div></div>
+          <table class="tab-dash">
+            <thead><tr><th scope="col">Categoria</th><th scope="col"><span class="sr">Proporção</span></th><th scope="col" class="num">Total</th><th scope="col" class="num">% receitas</th></tr></thead>
+            <tbody>${grupo('Entradas', 'entrada', p.receitas)}${grupo('Despesas', 'saida', p.despesas)}${grupo('Investimentos e poupança', 'reserva', p.reservas)}</tbody>
+            <tfoot><tr><th scope="row">Saldo (receitas − despesas − reservas)</th><td class="col-barra"></td><td class="num ${p.saldo < 0 ? 'txt-erro' : ''}">${moeda(p.saldo)}</td><td></td></tr></tfoot>
+          </table>
+        </div>
+        <div class="dash-coluna">
+          <div class="cartao">
+            <div class="cartao-cab"><div><h2>Composição das despesas</h2><p>${p.despesas ? `${moeda(p.despesas)} no período` : ''}</p></div></div>
+            ${composicao}
+          </div>
+          <div class="cartao">
+            <div class="cartao-cab"><div><h2>Pago × em aberto</h2><p>Despesas do período</p></div></div>
+            ${p.despesas ? `<div class="medidor" role="meter" aria-valuenow="${pctPago}" aria-valuemin="0" aria-valuemax="100" aria-label="Despesas pagas"><span style="width:${pctPago}%"></span></div>
+              <div class="medidor-leg"><span><b>${moeda(p.pagoDespesas)}</b> pagos · ${pctPago}%</span><span><b>${moeda(p.abertoDespesas)}</b> em aberto</span></div>` : '<p class="suave">Nenhuma despesa no período.</p>'}
+          </div>
+        </div>
+        <div class="cartao">
+          <div class="cartao-cab"><div><h2>Gastos por cartão</h2><p>Total lançado em cada cartão de crédito</p></div></div>
+          ${cartoes}
+        </div>
+        <div class="cartao">
+          <div class="cartao-cab"><div><h2>Maiores despesas</h2><p>Os 5 maiores lançamentos do período</p></div></div>
+          ${maiores}
+        </div>
+      </div>`;
+    hidratar(raiz);
+  }
+
+  // Tooltip único para as barras do dashboard (valor em destaque, rótulo depois).
+  function ligarTooltipDashboard() {
+    const tip = document.createElement('div');
+    tip.className = 'tip-graf'; tip.hidden = true; tip.setAttribute('role', 'tooltip');
+    document.body.append(tip);
+    const mostrar = (alvo, x, y) => {
+      const [rotulo, valor, det] = alvo.dataset.tip.split('|');
+      tip.replaceChildren();
+      const v = document.createElement('b'); v.textContent = valor;
+      const r = document.createElement('span'); r.textContent = rotulo;
+      tip.append(v, r);
+      if (det) { const d = document.createElement('small'); d.textContent = det; tip.append(d); }
+      tip.hidden = false;
+      const w = tip.offsetWidth, h = tip.offsetHeight;
+      tip.style.left = `${Math.min(window.innerWidth - w - 8, Math.max(8, x - w / 2))}px`;
+      tip.style.top = `${Math.max(8, y - h - 12)}px`;
+    };
+    const raiz = $('#dashboard');
+    raiz.addEventListener('pointermove', (e) => { const a = e.target.closest('[data-tip]'); if (a) mostrar(a, e.clientX, e.clientY); else tip.hidden = true; });
+    raiz.addEventListener('pointerleave', () => { tip.hidden = true; });
+    raiz.addEventListener('focusin', (e) => { const a = e.target.closest('[data-tip]'); if (a) { const r = a.getBoundingClientRect(); mostrar(a, r.left + r.width / 2, r.top); } });
+    raiz.addEventListener('focusout', () => { tip.hidden = true; });
+    raiz.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-periodo]');
+      if (b) { est.painelAno = b.dataset.periodo === 'ano'; render(); }
+    });
+    window.addEventListener('scroll', () => { tip.hidden = true; }, { passive: true });
   }
 
   // ---------- provisões ----------
@@ -1515,8 +1658,8 @@
     if (!eu || e.ctrlKey || e.metaKey || e.altKey || $('.fundo-modal')) return;
     if (e.target.closest('input, select, textarea, [contenteditable]')) return;
     if (e.key === 'n' || e.key === 'N') { e.preventDefault(); abrirFormulario(); }
-    else if (e.key === 'ArrowLeft' && ['mes', 'ano'].includes(est.secao)) mover(-1);
-    else if (e.key === 'ArrowRight' && ['mes', 'ano'].includes(est.secao)) mover(1);
+    else if (e.key === 'ArrowLeft' && ['mes', 'dashboard', 'ano'].includes(est.secao)) mover(-1);
+    else if (e.key === 'ArrowRight' && ['mes', 'dashboard', 'ano'].includes(est.secao)) mover(1);
     else if (e.key === '/' && est.secao === 'mes') { e.preventDefault(); $('#busca').focus(); }
   });
 
@@ -1537,6 +1680,7 @@
     }
     $('#carregando').remove();
     ligarPlanos();
+    ligarTooltipDashboard();
     if (eu.perfil === 'admin') {
       ligarConfigAssinaturas();
       api('GET', '/api/admin/usuarios').then(seloAssinaturas).catch(() => {});

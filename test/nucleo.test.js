@@ -269,3 +269,43 @@ test('cartão: provisão automática por cartão conta só aquele cartão', () =
   assert.equal(N.limparProvisao({ ...nu[0], categoria: 'variavel' }).cartao, '');
   assert.equal(N.limparProvisao(nu[0]).cartao, 'Nubank');
 });
+
+test('dashboard: totais por categoria, grupos, taxa de poupança e cartões', () => {
+  const g = (f) => N.gerar({ ano: 2026, mes: 9, dia: 5, ...f }, ids)[0];
+  const ls = [
+    g({ desc: 'Salário', centavos: 1000000, categoria: 'receita' }),
+    g({ desc: 'Aluguel', centavos: 300000, categoria: 'fixa' }),
+    g({ desc: 'Mercado', centavos: 150000, categoria: 'variavel' }),
+    g({ desc: 'Roupa', centavos: 50000, categoria: 'cartao', cartao: 'Nubank' }),
+    g({ desc: 'Jantar', centavos: 20000, categoria: 'cartao', cartao: 'nubank' }),
+    g({ desc: 'App', centavos: 5000, categoria: 'cartao' }),
+    g({ desc: 'Tesouro', centavos: 100000, categoria: 'investimento' }),
+    g({ desc: 'Reserva', centavos: 50000, categoria: 'poupanca' }),
+    g({ desc: 'Outro mês', centavos: 999999, categoria: 'fixa', mes: 8 }),
+  ];
+  ls[1].pago = true;
+  const p = N.painel(ls, 2026, 9);
+  assert.equal(p.receitas, 1000000);
+  assert.equal(p.despesas, 525000);
+  assert.equal(p.reservas, 150000);
+  assert.equal(p.saldo, 325000);
+  assert.equal(p.taxaPoupanca, 15);
+  assert.equal(p.comprometido, 53);
+  assert.equal(p.porCategoria.cartao, 75000);
+  assert.equal(p.qtdCategoria.cartao, 3);
+  assert.equal(p.pagoDespesas, 300000);
+  assert.equal(p.abertoDespesas, 225000);
+  assert.deepEqual(p.cartoes.map((c) => [c.nome, c.total, c.qtd]), [['Nubank', 70000, 2], ['Sem cartão definido', 5000, 1]]);
+  assert.deepEqual(p.maiores.map((l) => l.desc), ['Aluguel', 'Mercado', 'Roupa', 'Jantar', 'App']);
+  const ano = N.painel(ls, 2026);
+  assert.equal(ano.porCategoria.fixa, 1299999);
+  assert.equal(N.painel([], 2026, 9).taxaPoupanca, null);
+});
+
+test('dashboard: período anterior e variação', () => {
+  assert.deepEqual(N.periodoAnterior(2026, 0), { ano: 2025, mes: 11 });
+  assert.deepEqual(N.periodoAnterior(2026, null), { ano: 2025, mes: null });
+  assert.equal(N.variacao(120, 100), 20);
+  assert.equal(N.variacao(80, 100), -20);
+  assert.equal(N.variacao(50, 0), null);
+});
