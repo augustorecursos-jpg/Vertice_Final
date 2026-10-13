@@ -43,7 +43,7 @@ Regras de proteção:
 - **Visão anual:** gráfico de entradas × saídas, tabela por categoria com detalhe e saldo acumulado.
 - **Sincronização:** os dados ficam no servidor e o mesmo login funciona no celular e no computador. Se duas telas alterarem ao mesmo tempo, a segunda recebe a versão mais recente em vez de sobrescrever.
 - **Seus dados:** cópia em JSON, CSV do ano e importação, que também aceita arquivos do Vértice antigo.
-- **Cartão de crédito** como tipo de lançamento (despesa), com linha própria na visão anual. O campo **"Qual cartão?"** (Nubank, PicPay, Itaú, Caixa, Mercado Pago…, ou qualquer nome) aparece no lançamento e na provisão. A lista do mês tem filtros por cartão com o total de cada um, e uma provisão automática de cartão conta só os gastos daquele cartão.
+- **Cartão de crédito** como tipo de lançamento (despesa), com linha própria na visão anual. O campo **"Qual cartão?"** é uma lista suspensa de bancos (Nubank, PicPay, Itaú, Caixa, Mercado Pago…) com a opção **"Outros"** para digitar um banco diferente. Os nomes digitados passam a aparecer na lista. O campo existe no lançamento e na provisão. A lista do mês tem filtros por cartão com o total de cada um, e uma provisão automática de cartão conta só os gastos daquele cartão.
 - **Provisões:** previsão de gasto por mês, única ou mensal, com categoria opcional e contagem automática. Lançamentos e parcelas consomem a provisão do próprio mês. A tela mostra o consumido, o que resta, o estouro e o saldo após provisões.
 - **Observações** em cada lançamento: aparecem na lista, entram na busca e no CSV.
 - **Planejamentos:** tabelas livres (ex.: "Plano apartamento" com uma coluna por ano), com total por coluna, total final, meta opcional, CSV e duplicação.

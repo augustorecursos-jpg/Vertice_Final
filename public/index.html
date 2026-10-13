@@ -227,7 +227,6 @@
 
 <button type="button" class="fab" data-novo aria-label="Novo lançamento"><i data-ic="mais"></i></button>
 <div id="toast" role="status" aria-live="polite"></div>
-<datalist id="lista-cartoes"></datalist>
 
 <!-- ================= MODAL DE LANÇAMENTO ================= -->
 <template id="tpl-lancamento">
@@ -259,7 +258,7 @@
         </div>
         <div class="inteiro" id="bloco-cartao" hidden>
           <label class="rotulo" for="f-cartao">Qual cartão?</label>
-          <input type="text" id="f-cartao" maxlength="40" list="lista-cartoes" placeholder="Ex.: Nubank, PicPay, Itaú, Caixa, Mercado Pago" autocomplete="off">
+          <div id="f-cartao-campo"></div>
           <div class="atalhos-cartao" id="atalhos-cartao"></div>
         </div>
         <div class="inteiro">

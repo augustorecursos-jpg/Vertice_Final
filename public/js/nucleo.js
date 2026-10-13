@@ -91,7 +91,11 @@
   const limparObs = (v) => String(v ?? '').replace(/\r/g, '').trim().slice(0, MAX_OBS);
 
   // ---------- cartões de crédito ----------
-  const CARTOES_SUGERIDOS = ['Nubank', 'PicPay', 'Itaú', 'Caixa', 'Mercado Pago', 'Inter', 'C6 Bank', 'Bradesco', 'Santander', 'Banco do Brasil', 'XP', 'Will Bank'];
+  // Bancos da lista suspensa "Qual cartão?" (em ordem alfabética). Outros nomes entram por "Outros".
+  const CARTOES_SUGERIDOS = [
+    'Banco do Brasil', 'Banco Pan', 'BTG Pactual', 'Bradesco', 'C6 Bank', 'Caixa', 'Inter', 'Itaú', 'Mercado Pago',
+    'Neon', 'Next', 'Nubank', 'Original', 'PicPay', 'Porto Bank', 'Santander', 'Sicoob', 'Sicredi', 'Will Bank', 'XP',
+  ];
   /** Nome do cartão só existe em lançamentos/provisões da categoria cartão. */
   const limparCartao = (categoria, v) => (categoria === 'cartao' ? String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, 40) : '');
   const mesmoCartao = (a, b) => normalizarTexto(a) === normalizarTexto(b);

@@ -242,28 +242,27 @@
     f('f-valor').value = l.centavos != null ? N.valorParaCampo(l.centavos) : '';
     f('f-data').value = N.isoDe(l);
     f('f-obs').value = l.obs || '';
-    preencherListaCartoes();
-    f('f-cartao').value = l.cartao || (existente ? '' : prefs.cartao || '');
+    f('f-cartao-campo').innerHTML = seletorCartao('f-cartao', l.cartao || (existente ? '' : prefs.cartao || ''), 'Selecione o cartão');
+    const cartaoSel = ligarSeletorCartao(modal, 'f-cartao', () => { mostrarCartao(); opcoesProvisao(); });
     const recentes = cartoesConhecidos().usados.slice(0, 5);
     const lista = recentes.length ? recentes : N.CARTOES_SUGERIDOS.slice(0, 5);
     f('atalhos-cartao').innerHTML = lista.map((n) => `<button type="button" data-cartao="${esc(n)}">${esc(n)}</button>`).join('');
     f('atalhos-cartao').addEventListener('click', (e) => {
       const b = e.target.closest('[data-cartao]');
       if (!b) return;
-      f('f-cartao').value = b.dataset.cartao;
-      f('f-cartao').dispatchEvent(new Event('change', { bubbles: true }));
+      cartaoSel.definir(b.dataset.cartao);
     });
     function mostrarCartao() {
       const ehCartao = $('input[name=cat]:checked', modal)?.value === 'cartao';
       f('bloco-cartao').hidden = !ehCartao;
-      $$('[data-cartao]', modal).forEach((b) => b.classList.toggle('ativo', N.mesmoCartao(b.dataset.cartao, f('f-cartao').value)));
+      $$('[data-cartao]', modal).forEach((b) => b.classList.toggle('ativo', N.mesmoCartao(b.dataset.cartao, cartaoSel.ler())));
     }
     let provEscolhida = l.provisao || '';
     function opcoesProvisao() {
       const d = N.lerIso(f('f-data').value);
       const categoria = $('input[name=cat]:checked', modal)?.value;
       const tipo = CAT[categoria]?.tipo;
-      const cartao = categoria === 'cartao' ? f('f-cartao').value.trim() : '';
+      const cartao = categoria === 'cartao' ? cartaoSel.ler() : '';
       const atual = provEscolhida;
       // Provisões de outro cartão não aparecem para um gasto com cartão definido.
       const doMes = d ? dados.provisoes.filter((p) => p.ano === d.ano && p.mes === d.mes
@@ -275,8 +274,7 @@
       f('bloco-prov').hidden = tipo === 'entrada' || (!grupos.size);
     }
     f('f-prov').addEventListener('change', () => { provEscolhida = f('f-prov').value; });
-    modal.addEventListener('change', (e) => { if (['cat'].includes(e.target.name) || ['f-data', 'f-cartao'].includes(e.target.id)) { mostrarCartao(); opcoesProvisao(); } });
-    f('f-cartao').addEventListener('input', mostrarCartao);
+    modal.addEventListener('change', (e) => { if (e.target.name === 'cat' || e.target.id === 'f-data') { mostrarCartao(); opcoesProvisao(); } });
     mostrarCartao();
     opcoesProvisao();
     const contarObs = () => {
@@ -343,7 +341,11 @@
       const desc = f('f-desc').value.trim();
       const obs = f('f-obs').value.trim();
       const provisao = f('bloco-prov').hidden ? null : (f('f-prov').value || null);
-      const cartao = f('bloco-cartao').hidden ? '' : grafiaCartao(f('f-cartao').value);
+      const cartao = f('bloco-cartao').hidden ? '' : cartaoSel.ler();
+      if (!f('bloco-cartao').hidden && f('f-cartao').value === OUTRO && !cartao) {
+        f('f-cartao-outro').focus();
+        return toast('Digite o nome do banco ou escolha um da lista.', { erro: true });
+      }
       const centavos = N.lerValor(f('f-valor').value);
       const data = N.lerIso(f('f-data').value);
       const okDesc = erro('desc', desc ? '' : 'Informe uma descrição.');
@@ -708,8 +710,39 @@
       || dados.lancamentos.map((x) => x.cartao).find((c) => c && N.mesmoCartao(c, n))
       || n;
   }
-  function preencherListaCartoes() {
-    $('#lista-cartoes').innerHTML = cartoesConhecidos().todos.map((n) => `<option value="${esc(n)}">`).join('');
+  const OUTRO = '__outro';
+  /** Lista suspensa de bancos + "Outros" (abre um campo para digitar). */
+  function seletorCartao(id, valor, rotuloVazio) {
+    const bancos = N.CARTOES_SUGERIDOS;
+    const ehBanco = (n) => bancos.some((b) => N.mesmoCartao(b, n));
+    const proprios = cartoesConhecidos().usados.filter((n) => !ehBanco(n)).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    const atual = grafiaCartao(valor);
+    const conhecido = !atual || ehBanco(atual) || proprios.some((n) => N.mesmoCartao(n, atual));
+    const opt = (n) => `<option value="${esc(n)}" ${atual && N.mesmoCartao(n, atual) ? 'selected' : ''}>${esc(n)}</option>`;
+    return `<select id="${id}" class="sel-cartao">
+        <option value="">${esc(rotuloVazio)}</option>
+        <optgroup label="Bancos">${bancos.map(opt).join('')}</optgroup>
+        ${proprios.length ? `<optgroup label="Outros que você já usou">${proprios.map(opt).join('')}</optgroup>` : ''}
+        <option value="${OUTRO}" ${conhecido ? '' : 'selected'}>Outros (digitar o nome)</option>
+      </select>
+      <input type="text" id="${id}-outro" class="cartao-outro" maxlength="40" placeholder="Nome do banco ou cartão" autocomplete="off"
+        value="${conhecido ? '' : esc(atual)}" ${conhecido ? 'hidden' : ''} aria-label="Nome do banco ou cartão">`;
+  }
+  /** Liga o seletor: mostra o campo "Outros" quando escolhido. Devolve { ler, definir }. */
+  function ligarSeletorCartao(raiz, id, aoMudar = () => {}) {
+    const sel = $('#' + id, raiz), outro = $('#' + id + '-outro', raiz);
+    const ajustar = () => { outro.hidden = sel.value !== OUTRO; };
+    sel.addEventListener('change', () => { ajustar(); if (!outro.hidden) outro.focus(); aoMudar(); });
+    outro.addEventListener('input', aoMudar);
+    ajustar();
+    return {
+      ler: () => (sel.value === OUTRO ? grafiaCartao(outro.value) : sel.value),
+      definir(nome) {
+        const opcao = [...sel.options].find((o) => o.value !== OUTRO && o.value && N.mesmoCartao(o.value, nome));
+        if (opcao) sel.value = opcao.value; else { sel.value = OUTRO; outro.value = nome; }
+        ajustar(); aoMudar();
+      },
+    };
   }
 
   function renderProvisoes() {
@@ -782,7 +815,6 @@
   function formProvisao(existente = null) {
     const p = existente || { nome: '', centavos: null, categoria: null, auto: false, obs: '', ano: est.ano, mes: est.mes };
     const saidas = CATEGORIAS.filter((c) => c.tipo === 'saida');
-    preencherListaCartoes();
     const { modal, fechar } = abrirModal(`
       <form class="modal" role="dialog" aria-modal="true" aria-labelledby="t-prov" novalidate autocomplete="off">
         <div class="cab-modal"><h2 id="t-prov">${existente ? 'Editar provisão' : 'Nova provisão'}</h2>
@@ -796,8 +828,8 @@
             <input type="month" id="p-mes" value="${p.ano}-${String(p.mes + 1).padStart(2, '0')}" ${existente && dados.provisoes.filter((x) => x.grupo === p.grupo).length > 1 ? 'disabled title="Em provisões mensais o mês não muda"' : ''}></div>
           <div class="inteiro"><label class="rotulo" for="p-cat">Categoria <small>(opcional)</small></label>
             <select id="p-cat"><option value="">Qualquer despesa</option>${saidas.map((c) => `<option value="${c.id}" ${p.categoria === c.id ? 'selected' : ''}>${esc(c.nome)}</option>`).join('')}</select></div>
-          <div class="inteiro" id="p-cartao-bloco"><label class="rotulo" for="p-cartao">Qual cartão? <small>(vazio = todos os cartões)</small></label>
-            <input type="text" id="p-cartao" maxlength="40" list="lista-cartoes" autocomplete="off" placeholder="Ex.: Nubank, PicPay, Itaú, Caixa, Mercado Pago" value="${esc(p.cartao || '')}"></div>
+          <div class="inteiro" id="p-cartao-bloco"><label class="rotulo" for="p-cartao">Qual cartão?</label>
+            ${seletorCartao('p-cartao', p.cartao || '', 'Todos os cartões')}</div>
           <label class="inteiro check-linha" id="p-auto-linha"><input type="checkbox" id="p-auto" ${p.auto ? 'checked' : ''}>
             <span><b>Contar automaticamente</b> todos os lançamentos desta categoria no mês (e deste cartão, se informado)<small>Os que você ligar a outra provisão não entram.</small></span></label>
           ${existente ? '' : `<fieldset class="inteiro pilulas"><legend class="rotulo" style="padding:0;margin-bottom:.45em">Repetição</legend>
@@ -812,6 +844,7 @@
           <button class="btn">${ic('check')} ${existente ? 'Salvar' : 'Criar provisão'}</button></div>
       </form>`, { estreito: true });
     const f = (id) => $('#' + id, modal);
+    const cartaoProv = ligarSeletorCartao(modal, 'p-cartao');
     const atualizar = () => {
       f('p-auto-linha').hidden = !f('p-cat').value;
       f('p-cartao-bloco').hidden = f('p-cat').value !== 'cartao';
@@ -831,7 +864,8 @@
       if (!a || !m) return erro('Escolha o mês.');
       const categoria = f('p-cat').value || null;
       const auto = !!categoria && f('p-auto').checked;
-      const cartao = categoria === 'cartao' ? grafiaCartao(f('p-cartao').value) : '';
+      const cartao = categoria === 'cartao' ? cartaoProv.ler() : '';
+      if (categoria === 'cartao' && f('p-cartao').value === OUTRO && !cartao) return erro('Digite o nome do banco ou escolha um da lista.');
       const obs = f('p-obs').value.trim();
       const antes = dados.provisoes;
       if (existente) {

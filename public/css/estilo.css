@@ -336,6 +336,7 @@ table.t tr:last-child td { border-bottom: 0; }
 .filtros-cartao .rot-cartoes { display: inline-flex; align-items: center; gap: .35em; font-size: .78rem; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: #c2410c; margin-right: .2em; }
 .filtros-cartao button b { font-variant-numeric: tabular-nums; }
 .filtros-cartao button.ativo { background: #c2410c; border-color: #c2410c; }
+.cartao-outro { margin-top: .5em; }
 .atalhos-cartao { display: flex; flex-wrap: wrap; gap: .35em; margin-top: .45em; }
 .atalhos-cartao:empty { display: none; }
 .atalhos-cartao button { border: 1px solid var(--borda-forte); background: var(--papel); border-radius: 99px; padding: .25em .75em; font: inherit; font-size: .8rem; font-weight: 700; color: var(--suave); cursor: pointer; }
