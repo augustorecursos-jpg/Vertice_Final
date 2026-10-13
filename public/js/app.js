@@ -144,7 +144,7 @@
   const agora = new Date();
   const est = {
     secao: 'mes', ano: agora.getFullYear(), mes: agora.getMonth(),
-    filtro: 'todos', filtroProvisao: null, filtroCartao: null, painelAno: false, busca: '', ordem: prefs.ordem, abertas: new Set(),
+    filtro: 'todos', filtroProvisao: null, filtroCartao: null, painelAno: false, painelCats: new Set(), painelAbertas: new Set(), busca: '', ordem: prefs.ordem, abertas: new Set(),
   };
 
   // ---------- toast ----------
@@ -699,9 +699,11 @@
   function renderDashboard() {
     const raiz = $('#dashboard');
     const mes = est.painelAno ? null : est.mes;
-    const p = N.painel(dados.lancamentos, est.ano, mes);
+    const filtroCats = [...est.painelCats];
+    const visivel = (c) => !filtroCats.length || est.painelCats.has(c.id);
+    const p = N.painel(dados.lancamentos, est.ano, mes, { categorias: filtroCats });
     const ant = N.periodoAnterior(est.ano, mes);
-    const pa = N.painel(dados.lancamentos, ant.ano, ant.mes);
+    const pa = N.painel(dados.lancamentos, ant.ano, ant.mes, { categorias: filtroCats });
     const nomePeriodo = mes == null ? String(est.ano) : `${MESES[mes].toLowerCase()} de ${est.ano}`;
     const nomeAnterior = ant.mes == null ? String(ant.ano) : MESES_CURTOS[ant.mes].toLowerCase();
 
@@ -722,17 +724,42 @@
       const v = p.porCategoria[c.id];
       const pr = p.receitas ? Math.round((v / p.receitas) * 100) : null;
       const tip = `${c.nome}|${moeda(v)}|${p.qtdCategoria[c.id]} ${p.qtdCategoria[c.id] === 1 ? 'lançamento' : 'lançamentos'}${pr != null && c.tipo !== 'entrada' ? ` · ${pr}% das receitas` : ''}`;
-      return `<tr data-cat="${c.id}">
-        <th scope="row"><span class="chave"></span>${esc(c.nome)}</th>
+      const aberta = v > 0 && est.painelAbertas.has(c.id);
+      const nome = v ? `<button type="button" class="abrir-cat" data-expandir="${c.id}" aria-expanded="${aberta}" title="${aberta ? 'Fechar' : 'Ver'} detalhes">${ic('dir')}<span class="chave"></span>${esc(c.nome)}</button>`
+        : `<span class="sem-seta"></span><span class="chave"></span>${esc(c.nome)}`;
+      return `<tr data-cat="${c.id}" class="${aberta ? 'aberta' : ''}">
+        <th scope="row">${nome}</th>
         <td class="col-barra"><span class="trilho"><span class="barra-cat" style="width:${v ? Math.max(1.5, (v / max) * 100) : 0}%" data-tip="${esc(tip)}" tabindex="${v ? 0 : -1}"></span></span></td>
         <td class="num">${v ? moeda(v) : '<span class="suave">–</span>'}</td>
         <td class="num pct">${c.tipo === 'entrada' || pr == null || !v ? '' : `${pr}%`}</td>
-      </tr>`;
+      </tr>${aberta ? detalhes(c, v) : ''}`;
     };
+    // Linhas de detalhe: descrições da categoria, com barra proporcional ao total da categoria.
+    const LIMITE_DET = 15;
+    function detalhes(c, totalCat) {
+      const ds = N.detalhesCategoria(dados.lancamentos, est.ano, mes, c.id);
+      const mostrar = ds.slice(0, LIMITE_DET);
+      const resto = ds.slice(LIMITE_DET);
+      const linha = (d) => {
+        const pc = Math.round((d.total / totalCat) * 100);
+        const extra = [`${d.qtd} ${d.qtd === 1 ? 'lançamento' : 'lançamentos'}`, d.cartoes.length ? d.cartoes.join(', ') : '',
+          c.tipo !== 'entrada' && d.pago && d.pago < d.total ? `pago ${moeda(d.pago)}` : ''].filter(Boolean).join(' · ');
+        const pr = p.receitas && c.tipo !== 'entrada' ? `${Math.round((d.total / p.receitas) * 100)}%` : '';
+        return `<tr class="det-cat" data-cat="${c.id}">
+          <th scope="row"><span class="det-desc">${esc(d.desc)}</span><small>${esc(extra)}</small></th>
+          <td class="col-barra"><span class="trilho fino"><span class="barra-cat" style="width:${Math.max(1.5, pc)}%" data-tip="${esc(`${d.desc}|${moeda(d.total)}|${pc}% de ${c.nome}`)}" tabindex="0"></span></span></td>
+          <td class="num">${moeda(d.total)}</td><td class="num pct">${pr}</td></tr>`;
+      };
+      const somaResto = resto.reduce((a, d) => a + d.total, 0);
+      return mostrar.map(linha).join('') + (resto.length ? `<tr class="det-cat det-resto" data-cat="${c.id}"><th scope="row"><span class="det-desc">+ ${resto.length} outras descrições</span></th><td class="col-barra"></td><td class="num">${moeda(somaResto)}</td><td class="num pct"></td></tr>` : '');
+    }
     const grupo = (titulo, tipo, total) => `<tr class="grupo-cat"><th scope="rowgroup">${esc(titulo)}</th><td class="col-barra"></td><td class="num">${moeda(total)}</td><td class="num pct">${tipo !== 'entrada' && p.receitas ? pctTxt(Math.round((total / p.receitas) * 100)) : ''}</td></tr>
-      ${CATEGORIAS.filter((c) => c.tipo === tipo).map(linhaCat).join('')}`;
+      ${CATEGORIAS.filter((c) => c.tipo === tipo && visivel(c)).map(linhaCat).join('')}`;
+    const comValor = CATEGORIAS.filter((c) => visivel(c) && p.porCategoria[c.id]);
+    const todasAbertas = comValor.length > 0 && comValor.every((c) => est.painelAbertas.has(c.id));
+    const grupoSe = (titulo, tipo, total) => (CATEGORIAS.some((c) => c.tipo === tipo && visivel(c)) ? grupo(titulo, tipo, total) : '');
 
-    const despCats = CATEGORIAS.filter((c) => c.tipo === 'saida');
+    const despCats = CATEGORIAS.filter((c) => c.tipo === 'saida' && visivel(c));
     const composicao = p.despesas ? `<div class="pilha" role="img" aria-label="Composição das despesas">${despCats.filter((c) => p.porCategoria[c.id]).map((c) => {
       const v = p.porCategoria[c.id];
       return `<span data-cat="${c.id}" style="flex:${v} 1 0" data-tip="${esc(`${c.nome}|${moeda(v)}|${Math.round((v / p.despesas) * 100)}% das despesas`)}" tabindex="0"></span>`;
@@ -753,29 +780,41 @@
         <b class="num">${moeda(l.centavos)}</b></li>`).join('')}</ol>`
       : '<p class="suave">Nenhuma despesa no período.</p>';
 
+    // Indicadores conforme o filtro: sem receitas no filtro, o destaque vira o total filtrado.
+    const tem = (tipo) => CATEGORIAS.some((c) => c.tipo === tipo && visivel(c));
+    const tiles = [];
+    if (tem('entrada')) tiles.push(tile({ classe: 'destaque' + (p.saldo < 0 ? ' negativo' : ''), rotulo: filtroCats.length ? 'Saldo das categorias filtradas' : 'Saldo do período', valor: moeda(p.saldo), det: delta(p.saldo, pa.saldo) }));
+    else tiles.push(tile({ classe: 'destaque', rotulo: 'Total das categorias filtradas', valor: moeda(p.despesas + p.reservas), det: delta(p.despesas + p.reservas, pa.despesas + pa.reservas, false) }));
+    if (tem('entrada')) tiles.push(tile({ classe: 'verde', rotulo: 'Receitas', valor: moeda(p.receitas), det: delta(p.receitas, pa.receitas) }));
+    if (tem('saida')) tiles.push(tile({ classe: 'vermelho', rotulo: 'Despesas', valor: moeda(p.despesas), det: `${p.comprometido != null ? `${p.comprometido}% das receitas · ` : ''}${delta(p.despesas, pa.despesas, false)}` }));
+    if (tem('reserva')) tiles.push(tile({ classe: 'indigo', rotulo: 'Investido e poupado', valor: moeda(p.reservas), det: delta(p.reservas, pa.reservas) }));
+    if (tem('entrada') && tem('reserva')) tiles.push(tile({ classe: 'ciano', rotulo: 'Taxa de poupança', valor: pctTxt(p.taxaPoupanca), det: 'do que entrou foi investido ou poupado' }));
+
     raiz.innerHTML = `
       <div class="cartao dash-cab">
         <div><h2><span class="bolha"><i data-ic="painel"></i></span> Dashboard de ${esc(nomePeriodo)}</h2>
-          <p>${vazio ? 'Nenhum lançamento neste período.' : `${p.qtd} ${p.qtd === 1 ? 'lançamento' : 'lançamentos'} · comparação com ${esc(ant.mes == null ? String(ant.ano) : `${MESES[ant.mes].toLowerCase()}`)}`}</p></div>
+          <p>${filtroCats.length ? `<b>Filtrando:</b> ${esc(CATEGORIAS.filter(visivel).map((c) => c.nome).join(', '))} · ` : ''}${vazio ? 'Nenhum lançamento neste período.' : `${p.qtd} ${p.qtd === 1 ? 'lançamento' : 'lançamentos'} · comparação com ${esc(ant.mes == null ? String(ant.ano) : `${MESES[ant.mes].toLowerCase()}`)}`}</p></div>
+        <div class="filtro-cats" role="group" aria-label="Filtrar por categoria">
+          <span class="rot-filtro">Categorias</span>
+          <button type="button" data-pcat="" class="${filtroCats.length ? '' : 'ativo'}" aria-pressed="${!filtroCats.length}">Todas</button>
+          ${CATEGORIAS.map((c) => `<button type="button" data-pcat="${c.id}" data-cat="${c.id}" class="${est.painelCats.has(c.id) ? 'ativo' : ''}" aria-pressed="${est.painelCats.has(c.id)}"><span class="chave"></span>${esc(c.nome)}</button>`).join('')}
+        </div>
         <div class="alternar" role="group" aria-label="Período">
           <button type="button" data-periodo="mes" aria-pressed="${!est.painelAno}" class="${est.painelAno ? '' : 'ativo'}">Mês</button>
           <button type="button" data-periodo="ano" aria-pressed="${!!est.painelAno}" class="${est.painelAno ? 'ativo' : ''}">Ano</button>
         </div>
       </div>
-      <div class="cards dash-cards">
-        ${tile({ classe: 'destaque' + (p.saldo < 0 ? ' negativo' : ''), rotulo: 'Saldo do período', valor: moeda(p.saldo), det: delta(p.saldo, pa.saldo) })}
-        ${tile({ classe: 'verde', rotulo: 'Receitas', valor: moeda(p.receitas), det: delta(p.receitas, pa.receitas) })}
-        ${tile({ classe: 'vermelho', rotulo: 'Despesas', valor: moeda(p.despesas), det: `${p.comprometido != null ? `${p.comprometido}% das receitas · ` : ''}${delta(p.despesas, pa.despesas, false)}` })}
-        ${tile({ classe: 'indigo', rotulo: 'Investido e poupado', valor: moeda(p.reservas), det: delta(p.reservas, pa.reservas) })}
-        ${tile({ classe: 'ciano', rotulo: 'Taxa de poupança', valor: pctTxt(p.taxaPoupanca), det: 'do que entrou foi investido ou poupado' })}
-      </div>
+      <div class="cards dash-cards" style="--n:${tiles.length}">${tiles.join('')}</div>
       <div class="dash-grade">
         <div class="cartao dash-categorias">
-          <div class="cartao-cab"><div><h2>Total por categoria</h2><p>Valores do período e quanto cada um representa das receitas.</p></div></div>
+          <div class="cartao-cab"><div><h2>Total por categoria</h2><p>Toque em uma categoria para ver as descrições.</p></div>
+            ${comValor.length ? `<button type="button" class="btn fantasma peq" data-expandir-todas="${todasAbertas ? 'fechar' : 'abrir'}">${todasAbertas ? 'Fechar todas' : 'Abrir todas'}</button>` : ''}</div>
           <table class="tab-dash">
             <thead><tr><th scope="col">Categoria</th><th scope="col"><span class="sr">Proporção</span></th><th scope="col" class="num">Total</th><th scope="col" class="num">% receitas</th></tr></thead>
-            <tbody>${grupo('Entradas', 'entrada', p.receitas)}${grupo('Despesas', 'saida', p.despesas)}${grupo('Investimentos e poupança', 'reserva', p.reservas)}</tbody>
-            <tfoot><tr><th scope="row">Saldo (receitas − despesas − reservas)</th><td class="col-barra"></td><td class="num ${p.saldo < 0 ? 'txt-erro' : ''}">${moeda(p.saldo)}</td><td></td></tr></tfoot>
+            <tbody>${grupoSe('Entradas', 'entrada', p.receitas)}${grupoSe('Despesas', 'saida', p.despesas)}${grupoSe('Investimentos e poupança', 'reserva', p.reservas)}</tbody>
+            <tfoot><tr>${tem('entrada')
+              ? `<th scope="row">Saldo (receitas − despesas − reservas)</th><td class="col-barra"></td><td class="num ${p.saldo < 0 ? 'txt-erro' : ''}">${moeda(p.saldo)}</td>`
+              : `<th scope="row">Total das categorias filtradas</th><td class="col-barra"></td><td class="num">${moeda(p.despesas + p.reservas)}</td>`}<td></td></tr></tfoot>
           </table>
         </div>
         <div class="dash-coluna">
@@ -825,7 +864,29 @@
     raiz.addEventListener('focusout', () => { tip.hidden = true; });
     raiz.addEventListener('click', (e) => {
       const b = e.target.closest('[data-periodo]');
-      if (b) { est.painelAno = b.dataset.periodo === 'ano'; render(); }
+      if (b) { est.painelAno = b.dataset.periodo === 'ano'; render(); return; }
+      const fc = e.target.closest('[data-pcat]');
+      if (fc) {
+        const id = fc.dataset.pcat;
+        if (!id) est.painelCats.clear();
+        else if (est.painelCats.has(id)) est.painelCats.delete(id);
+        else est.painelCats.add(id);
+        if (est.painelCats.size === CATEGORIAS.length) est.painelCats.clear();
+        render(); return;
+      }
+      const ex = e.target.closest('[data-expandir]');
+      if (ex) {
+        const id = ex.dataset.expandir;
+        if (est.painelAbertas.has(id)) est.painelAbertas.delete(id); else est.painelAbertas.add(id);
+        render();
+        $(`#dashboard [data-expandir="${id}"]`)?.focus();
+        return;
+      }
+      const todas = e.target.closest('[data-expandir-todas]');
+      if (todas) {
+        if (todas.dataset.expandirTodas === 'abrir') CATEGORIAS.forEach((c) => est.painelAbertas.add(c.id)); else est.painelAbertas.clear();
+        render();
+      }
     });
     window.addEventListener('scroll', () => { tip.hidden = true; }, { passive: true });
   }

@@ -228,8 +228,10 @@
   // ---------- dashboard ----------
 
   /** Totais de um período: mês (mes 0–11) ou ano inteiro (mes = null). */
-  function painel(lista, ano, mes = null) {
-    const itens = lista.filter((l) => l.ano === ano && (mes == null || l.mes === mes));
+  /** categorias: lista de ids para filtrar (vazia ou ausente = todas). */
+  function painel(lista, ano, mes = null, { categorias = null } = {}) {
+    const filtro = categorias && categorias.length ? new Set(categorias) : null;
+    const itens = lista.filter((l) => l.ano === ano && (mes == null || l.mes === mes) && (!filtro || filtro.has(l.categoria)));
     const porCategoria = Object.fromEntries(CATEGORIAS.map((c) => [c.id, 0]));
     const qtdCategoria = Object.fromEntries(CATEGORIAS.map((c) => [c.id, 0]));
     const cartoes = new Map();
@@ -259,6 +261,24 @@
       cartoes: [...cartoes.values()].sort((a, b) => b.total - a.total),
       maiores: itens.filter((l) => CAT[l.categoria]?.tipo === 'saida').sort((a, b) => b.centavos - a.centavos).slice(0, 5),
     };
+  }
+
+  /**
+   * Detalhe de uma categoria no período: os lançamentos agrupados pela descrição
+   * (parcelas e meses de uma conta mensal somam juntos), do maior para o menor.
+   */
+  function detalhesCategoria(lista, ano, mes, categoria) {
+    const grupos = new Map();
+    for (const l of lista) {
+      if (l.categoria !== categoria || l.ano !== ano || (mes != null && l.mes !== mes)) continue;
+      const k = normalizarTexto(l.desc);
+      const g = grupos.get(k) || { desc: l.desc, total: 0, qtd: 0, pago: 0, cartoes: [] };
+      g.total += l.centavos; g.qtd++;
+      if (l.pago) g.pago += l.centavos;
+      if (l.cartao && !g.cartoes.some((c) => normalizarTexto(c) === normalizarTexto(l.cartao))) g.cartoes.push(l.cartao);
+      grupos.set(k, g);
+    }
+    return [...grupos.values()].sort((a, b) => b.total - a.total || a.desc.localeCompare(b.desc, 'pt-BR'));
   }
 
   /** Período anterior para comparação: mês anterior ou ano anterior. */
@@ -474,7 +494,7 @@
 
   return {
     LIMITES_PLANO, novoPlano, totaisPlano, limparPlano, csvPlano,
-    CARTOES_SUGERIDOS, mesmoCartao, painel, periodoAnterior, variacao,
+    CARTOES_SUGERIDOS, mesmoCartao, painel, detalhesCategoria, periodoAnterior, variacao,
     MAX_PROVISOES, gerarProvisoes, limparProvisao, consumoProvisoes, reservadoProvisoes,
     VERSAO_DADOS, CATEGORIAS, CAT, MESES, MESES_CURTOS,
     lerValor, moeda, moedaCurta, valorParaCampo, dividir,

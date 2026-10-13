@@ -309,3 +309,26 @@ test('dashboard: período anterior e variação', () => {
   assert.equal(N.variacao(80, 100), -20);
   assert.equal(N.variacao(50, 0), null);
 });
+
+test('dashboard: filtro de categorias e detalhe por descrição', () => {
+  const g = (f) => N.gerar({ ano: 2026, mes: 9, dia: 5, ...f }, ids);
+  const ls = [
+    ...g({ desc: 'Salário', centavos: 500000, categoria: 'receita' }),
+    ...g({ desc: 'Mercado', centavos: 40000, categoria: 'variavel' }),
+    ...g({ desc: 'mercado', centavos: 10000, categoria: 'variavel', dia: 20 }),
+    ...g({ desc: 'Luz', centavos: 20000, categoria: 'variavel' }),
+    ...g({ desc: 'Notebook', centavos: 300000, categoria: 'cartao', cartao: 'Nubank', recorrencia: 'parcelada', quantidade: 3, mes: 8 }),
+    ...g({ desc: 'Notebook', centavos: 50000, categoria: 'cartao', cartao: 'Itaú' }),
+  ];
+  ls[1].pago = true;
+  const so = N.painel(ls, 2026, 9, { categorias: ['variavel', 'cartao'] });
+  assert.equal(so.receitas, 0);
+  assert.equal(so.despesas, 70000 + 100000 + 50000);
+  assert.equal(so.taxaPoupanca, null);
+  assert.equal(N.painel(ls, 2026, 9, { categorias: [] }).receitas, 500000);
+  const det = N.detalhesCategoria(ls, 2026, 9, 'variavel');
+  assert.deepEqual(det.map((d) => [d.desc, d.total, d.qtd, d.pago]), [['Mercado', 50000, 2, 40000], ['Luz', 20000, 1, 0]]);
+  const notebook = N.detalhesCategoria(ls, 2026, null, 'cartao');
+  assert.deepEqual(notebook.map((d) => [d.desc, d.total, d.qtd]), [['Notebook', 350000, 4]]);
+  assert.deepEqual(notebook[0].cartoes, ['Nubank', 'Itaú']);
+});
