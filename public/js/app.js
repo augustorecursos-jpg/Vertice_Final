@@ -43,6 +43,7 @@
     livro: '<path d="M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2z"/><path d="M22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z"/>',
     dinheiro: '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/>',
     email: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>',
+    cartao: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h2M11 15h3"/>',
     alvo: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
     brilho: '<path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/>',
     nota: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
@@ -142,7 +143,7 @@
   const agora = new Date();
   const est = {
     secao: 'mes', ano: agora.getFullYear(), mes: agora.getMonth(),
-    filtro: 'todos', filtroProvisao: null, busca: '', ordem: prefs.ordem, abertas: new Set(),
+    filtro: 'todos', filtroProvisao: null, filtroCartao: null, busca: '', ordem: prefs.ordem, abertas: new Set(),
   };
 
   // ---------- toast ----------
@@ -241,12 +242,32 @@
     f('f-valor').value = l.centavos != null ? N.valorParaCampo(l.centavos) : '';
     f('f-data').value = N.isoDe(l);
     f('f-obs').value = l.obs || '';
+    preencherListaCartoes();
+    f('f-cartao').value = l.cartao || (existente ? '' : prefs.cartao || '');
+    const recentes = cartoesConhecidos().usados.slice(0, 5);
+    const lista = recentes.length ? recentes : N.CARTOES_SUGERIDOS.slice(0, 5);
+    f('atalhos-cartao').innerHTML = lista.map((n) => `<button type="button" data-cartao="${esc(n)}">${esc(n)}</button>`).join('');
+    f('atalhos-cartao').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-cartao]');
+      if (!b) return;
+      f('f-cartao').value = b.dataset.cartao;
+      f('f-cartao').dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    function mostrarCartao() {
+      const ehCartao = $('input[name=cat]:checked', modal)?.value === 'cartao';
+      f('bloco-cartao').hidden = !ehCartao;
+      $$('[data-cartao]', modal).forEach((b) => b.classList.toggle('ativo', N.mesmoCartao(b.dataset.cartao, f('f-cartao').value)));
+    }
     let provEscolhida = l.provisao || '';
     function opcoesProvisao() {
       const d = N.lerIso(f('f-data').value);
-      const tipo = CAT[$('input[name=cat]:checked', modal)?.value]?.tipo;
+      const categoria = $('input[name=cat]:checked', modal)?.value;
+      const tipo = CAT[categoria]?.tipo;
+      const cartao = categoria === 'cartao' ? f('f-cartao').value.trim() : '';
       const atual = provEscolhida;
-      const doMes = d ? dados.provisoes.filter((p) => p.ano === d.ano && p.mes === d.mes) : [];
+      // Provisões de outro cartão não aparecem para um gasto com cartão definido.
+      const doMes = d ? dados.provisoes.filter((p) => p.ano === d.ano && p.mes === d.mes
+        && !(p.cartao && cartao && !N.mesmoCartao(p.cartao, cartao))) : [];
       const grupos = new Map(doMes.map((p) => [p.grupo, p]));
       if (atual && !grupos.has(atual) && nomeProvisao(atual)) grupos.set(atual, { nome: `${nomeProvisao(atual)} (outro mês)` });
       f('f-prov').innerHTML = `<option value="">Nenhuma</option>${[...grupos].map(([g, p]) => `<option value="${esc(g)}">${esc(p.nome)}</option>`).join('')}`;
@@ -254,7 +275,9 @@
       f('bloco-prov').hidden = tipo === 'entrada' || (!grupos.size);
     }
     f('f-prov').addEventListener('change', () => { provEscolhida = f('f-prov').value; });
-    modal.addEventListener('change', (e) => { if (e.target.name === 'cat' || e.target.id === 'f-data') opcoesProvisao(); });
+    modal.addEventListener('change', (e) => { if (['cat'].includes(e.target.name) || ['f-data', 'f-cartao'].includes(e.target.id)) { mostrarCartao(); opcoesProvisao(); } });
+    f('f-cartao').addEventListener('input', mostrarCartao);
+    mostrarCartao();
     opcoesProvisao();
     const contarObs = () => {
       const n = f('f-obs').value.length;
@@ -320,6 +343,7 @@
       const desc = f('f-desc').value.trim();
       const obs = f('f-obs').value.trim();
       const provisao = f('bloco-prov').hidden ? null : (f('f-prov').value || null);
+      const cartao = f('bloco-cartao').hidden ? '' : grafiaCartao(f('f-cartao').value);
       const centavos = N.lerValor(f('f-valor').value);
       const data = N.lerIso(f('f-data').value);
       const okDesc = erro('desc', desc ? '' : 'Informe uma descrição.');
@@ -327,12 +351,14 @@
       const okData = erro('data', data ? '' : 'Escolha a data de vencimento.');
       if (!okDesc || !okValor || !okData) { modal.querySelector('[aria-invalid=true]')?.focus(); return; }
       const categoria = val('cat');
-      prefs.categoria = categoria; salvarPrefs();
+      prefs.categoria = categoria;
+      if (cartao) prefs.cartao = cartao;
+      salvarPrefs();
 
       if (existente) {
         const escopo = await escolherEscopo(existente, 'Editar');
         if (!escopo) return;
-        dados.lancamentos = N.editar(dados.lancamentos, existente.id, { desc, obs, provisao, centavos, categoria, ...data }, escopo);
+        dados.lancamentos = N.editar(dados.lancamentos, existente.id, { desc, obs, provisao, cartao, centavos, categoria, ...data }, escopo);
         fechar(); salvar();
         toast('Lançamento atualizado.');
         return;
@@ -341,7 +367,7 @@
       const rec = val('rec');
       const qtd = Math.floor(+f('f-qtd').value);
       if (rec !== 'unica' && !(qtd >= 2 && qtd <= 120)) { f('f-qtd').focus(); return toast('A quantidade deve ficar entre 2 e 120.', { erro: true }); }
-      const novos = N.gerar({ desc, obs, provisao, centavos, categoria, ...data, recorrencia: rec, quantidade: qtd, modoValor: val('modo') });
+      const novos = N.gerar({ desc, obs, provisao, cartao, centavos, categoria, ...data, recorrencia: rec, quantidade: qtd, modoValor: val('modo') });
       dados.lancamentos.push(...novos);
       fechar(); salvar();
       const msg = novos.length > 1 ? `${novos.length} lançamentos criados.` : 'Lançamento criado.';
@@ -490,8 +516,21 @@
       ? N.consumoProvisoes(dados.lancamentos, dados.provisoes, est.ano, est.mes).find((c) => c.provisao.grupo === est.filtroProvisao) : null;
     if (est.filtroProvisao && !consumoFiltro) est.filtroProvisao = null;
     if (consumoFiltro) { const ids = new Set(consumoFiltro.itens.map((l) => l.id)); itens = itens.filter((l) => ids.has(l.id)); }
+    // Cartões do mês, com o total de cada um (a "fatura" do mês).
+    const cartoesMes = new Map();
+    for (const l of doMes) {
+      if (l.categoria !== 'cartao') continue;
+      const nome = l.cartao || 'Sem cartão definido';
+      const k = N.normalizar(nome);
+      const c = cartoesMes.get(k) || { nome, total: 0 };
+      c.total += l.centavos; cartoesMes.set(k, c);
+    }
+    if (est.filtroCartao && !cartoesMes.has(est.filtroCartao)) est.filtroCartao = null;
+    $('#filtros-cartao').innerHTML = cartoesMes.size && est.filtro !== 'atrasados' ? `<span class="rot-cartoes">${ic('cartao')} Cartões</span>${[...cartoesMes].sort((a, b) => b[1].total - a[1].total).map(([k, c]) =>
+      `<button type="button" data-filtro-cartao="${esc(k)}" class="${est.filtroCartao === k ? 'ativo' : ''}" aria-pressed="${est.filtroCartao === k}">${esc(c.nome)} <b>${moeda(c.total)}</b></button>`).join('')}` : '';
+    if (est.filtroCartao && est.filtro !== 'atrasados') itens = itens.filter((l) => l.categoria === 'cartao' && N.normalizar(l.cartao || 'Sem cartão definido') === est.filtroCartao);
     const q = N.normalizar(est.busca.trim());
-    if (q) itens = itens.filter((l) => N.normalizar(`${l.desc} ${l.obs || ''} ${CAT[l.categoria].nome} ${nomeProvisao(l.provisao) || ''}`).includes(q));
+    if (q) itens = itens.filter((l) => N.normalizar(`${l.desc} ${l.obs || ''} ${CAT[l.categoria].nome} ${l.cartao || ''} ${nomeProvisao(l.provisao) || ''}`).includes(q));
     const ord = {
       venc: (a, b) => N.dataDe(a) - N.dataDe(b) || a.pago - b.pago || b.centavos - a.centavos,
       maior: (a, b) => b.centavos - a.centavos,
@@ -537,7 +576,7 @@
           aria-label="${l.pago ? 'Desmarcar' : 'Marcar como ' + c.feito.toLowerCase()}: ${esc(l.desc)}" title="${l.pago ? 'Desmarcar' : 'Marcar como ' + c.feito.toLowerCase()}">${ic('check')}</button>
         <div class="data" aria-hidden="true"><b>${d.getDate()}</b><small>${MESES_CURTOS[d.getMonth()]}${outroMes ? ' ' + String(d.getFullYear()).slice(2) : ''}</small></div>
         <div class="desc"><b title="${esc(N.titulo(l))}">${esc(l.desc)}</b>
-          <div class="tags"><span class="tag quando neutra">${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span><span class="tag cat" data-cat="${l.categoria}">${esc(c.nome)}</span>${serie}${l.provisao && nomeProvisao(l.provisao) ? `<span class="tag prov-tag" title="Provisão">${ic('alvo')} ${esc(nomeProvisao(l.provisao))}</span>` : ''}${situ}</div>${l.obs ? `<div class="obs"><button type="button" data-acao="obs" aria-expanded="false" title="${esc(l.obs)}">${ic('nota')}<span>${esc(l.obs)}</span></button></div>` : ''}</div>
+          <div class="tags"><span class="tag quando neutra">${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span><span class="tag cat" data-cat="${l.categoria}">${esc(nomeCategoria(l.categoria, l.cartao))}</span>${serie}${l.provisao && nomeProvisao(l.provisao) ? `<span class="tag prov-tag" title="Provisão">${ic('alvo')} ${esc(nomeProvisao(l.provisao))}</span>` : ''}${situ}</div>${l.obs ? `<div class="obs"><button type="button" data-acao="obs" aria-expanded="false" title="${esc(l.obs)}">${ic('nota')}<span>${esc(l.obs)}</span></button></div>` : ''}</div>
         <div class="valor">${c.tipo === 'entrada' ? '+ ' : ''}${moeda(l.centavos)}</div>
         <div class="acoes">
           <button type="button" class="btn fantasma icone peq" data-acao="editar" data-id="${esc(l.id)}" aria-label="Editar ${esc(l.desc)}" title="Editar">${ic('editar')}</button>
@@ -648,6 +687,30 @@
 
   // ---------- provisões ----------
   const nomeProvisao = (grupo) => dados.provisoes.find((p) => p.grupo === grupo)?.nome;
+  const nomeCategoria = (categoria, cartao) => (categoria === 'cartao' && cartao ? `Cartão · ${cartao}` : CAT[categoria].nome);
+  /** Cartões já usados (mais recentes primeiro) seguidos das sugestões. */
+  function cartoesConhecidos() {
+    const usados = [];
+    const vistos = new Set();
+    for (const x of [...dados.lancamentos].sort((a, b) => b.criadoEm - a.criadoEm).concat(dados.provisoes)) {
+      const n = (x.cartao || '').trim();
+      if (n && !vistos.has(N.normalizar(n))) { vistos.add(N.normalizar(n)); usados.push(n); }
+    }
+    const sugeridos = N.CARTOES_SUGERIDOS.filter((n) => !vistos.has(N.normalizar(n)));
+    return { usados, todos: [...usados, ...sugeridos] };
+  }
+  /** Usa a grafia já conhecida do cartão ("picpay" → "PicPay"). */
+  function grafiaCartao(nome) {
+    const n = String(nome || '').trim();
+    if (!n) return '';
+    return N.CARTOES_SUGERIDOS.find((c) => N.mesmoCartao(c, n))
+      || dados.provisoes.map((x) => x.cartao).find((c) => c && N.mesmoCartao(c, n))
+      || dados.lancamentos.map((x) => x.cartao).find((c) => c && N.mesmoCartao(c, n))
+      || n;
+  }
+  function preencherListaCartoes() {
+    $('#lista-cartoes').innerHTML = cartoesConhecidos().todos.map((n) => `<option value="${esc(n)}">`).join('');
+  }
 
   function renderProvisoes() {
     const raiz = $('#provisoes');
@@ -675,7 +738,7 @@
         return `<div class="prov ${estado}">
           <div class="prov-topo">
             <div class="prov-nome"><b>${esc(p.nome)}</b>
-              <span class="tags">${p.categoria ? `<span class="tag cat" data-cat="${p.categoria}">${esc(CAT[p.categoria].nome)}</span>` : ''}
+              <span class="tags">${p.categoria ? `<span class="tag cat" data-cat="${p.categoria}">${esc(nomeCategoria(p.categoria, p.cartao))}</span>` : ''}
               ${p.auto ? `<span class="tag info" title="Conta automaticamente os lançamentos desta categoria">${ic('brilho')} automática</span>` : ''}
               ${serie ? `<span class="tag info">${ic('repetir')} mensal</span>` : ''}</span></div>
             <div class="prov-valores"><b>${moeda(c.consumido)}</b> <span class="suave">de ${moeda(p.centavos)}</span></div>
@@ -719,6 +782,7 @@
   function formProvisao(existente = null) {
     const p = existente || { nome: '', centavos: null, categoria: null, auto: false, obs: '', ano: est.ano, mes: est.mes };
     const saidas = CATEGORIAS.filter((c) => c.tipo === 'saida');
+    preencherListaCartoes();
     const { modal, fechar } = abrirModal(`
       <form class="modal" role="dialog" aria-modal="true" aria-labelledby="t-prov" novalidate autocomplete="off">
         <div class="cab-modal"><h2 id="t-prov">${existente ? 'Editar provisão' : 'Nova provisão'}</h2>
@@ -732,8 +796,10 @@
             <input type="month" id="p-mes" value="${p.ano}-${String(p.mes + 1).padStart(2, '0')}" ${existente && dados.provisoes.filter((x) => x.grupo === p.grupo).length > 1 ? 'disabled title="Em provisões mensais o mês não muda"' : ''}></div>
           <div class="inteiro"><label class="rotulo" for="p-cat">Categoria <small>(opcional)</small></label>
             <select id="p-cat"><option value="">Qualquer despesa</option>${saidas.map((c) => `<option value="${c.id}" ${p.categoria === c.id ? 'selected' : ''}>${esc(c.nome)}</option>`).join('')}</select></div>
+          <div class="inteiro" id="p-cartao-bloco"><label class="rotulo" for="p-cartao">Qual cartão? <small>(vazio = todos os cartões)</small></label>
+            <input type="text" id="p-cartao" maxlength="40" list="lista-cartoes" autocomplete="off" placeholder="Ex.: Nubank, PicPay, Itaú, Caixa, Mercado Pago" value="${esc(p.cartao || '')}"></div>
           <label class="inteiro check-linha" id="p-auto-linha"><input type="checkbox" id="p-auto" ${p.auto ? 'checked' : ''}>
-            <span><b>Contar automaticamente</b> todos os lançamentos desta categoria no mês<small>Os que você ligar a outra provisão não entram.</small></span></label>
+            <span><b>Contar automaticamente</b> todos os lançamentos desta categoria no mês (e deste cartão, se informado)<small>Os que você ligar a outra provisão não entram.</small></span></label>
           ${existente ? '' : `<fieldset class="inteiro pilulas"><legend class="rotulo" style="padding:0;margin-bottom:.45em">Repetição</legend>
             <label><input type="radio" name="p-rep" value="nao" checked><span>Só este mês</span></label>
             <label><input type="radio" name="p-rep" value="sim"><span>Todo mês</span></label></fieldset>
@@ -748,6 +814,7 @@
     const f = (id) => $('#' + id, modal);
     const atualizar = () => {
       f('p-auto-linha').hidden = !f('p-cat').value;
+      f('p-cartao-bloco').hidden = f('p-cat').value !== 'cartao';
       if (f('p-qtd-bloco')) f('p-qtd-bloco').hidden = $('input[name=p-rep]:checked', modal).value !== 'sim';
     };
     modal.addEventListener('change', atualizar);
@@ -764,6 +831,7 @@
       if (!a || !m) return erro('Escolha o mês.');
       const categoria = f('p-cat').value || null;
       const auto = !!categoria && f('p-auto').checked;
+      const cartao = categoria === 'cartao' ? grafiaCartao(f('p-cartao').value) : '';
       const obs = f('p-obs').value.trim();
       const antes = dados.provisoes;
       if (existente) {
@@ -773,7 +841,7 @@
         dados.provisoes = dados.provisoes.map((x) => {
           const alvo = x.id === existente.id || (x.grupo === existente.grupo && (escopo === 'todos' || (escopo === 'proximos' && N.chaveMes(x.ano, x.mes) >= k)));
           if (!alvo) return x;
-          const novo = { ...x, nome, centavos, categoria, auto, obs };
+          const novo = { ...x, nome, centavos, categoria, auto, obs, cartao };
           if (x.id === existente.id && escopo === 'este' && !f('p-mes').disabled) { novo.ano = a; novo.mes = m - 1; }
           return novo;
         });
@@ -781,7 +849,7 @@
         const repetir = $('input[name=p-rep]:checked', modal).value === 'sim';
         const quantidade = Math.floor(+f('p-qtd').value);
         if (repetir && !(quantidade >= 2 && quantidade <= 60)) return erro('Escolha entre 2 e 60 meses.');
-        dados.provisoes = [...dados.provisoes, ...N.gerarProvisoes({ nome, centavos, categoria, auto, obs, ano: a, mes: m - 1, repetir, quantidade })];
+        dados.provisoes = [...dados.provisoes, ...N.gerarProvisoes({ nome, centavos, categoria, auto, obs, cartao, ano: a, mes: m - 1, repetir, quantidade })];
       }
       fechar(); salvar();
       toast(existente ? 'Provisão atualizada.' : 'Provisão criada.', { acao: () => { dados.provisoes = antes; salvar(); } });
@@ -1356,8 +1424,9 @@
     if (alvo.matches('[data-trocar-senha]')) return trocarSenha();
     if (alvo.matches('[data-novo-usuario]')) return formUsuario();
     if (alvo.dataset.usr) return acaoUsuario(alvo.dataset.usr, Number(alvo.dataset.uid));
-    if (alvo.matches('[data-limpar-filtro]')) { est.filtro = 'todos'; est.filtroProvisao = null; est.busca = ''; $('#busca').value = ''; return render(); }
+    if (alvo.matches('[data-limpar-filtro]')) { est.filtro = 'todos'; est.filtroProvisao = null; est.filtroCartao = null; est.busca = ''; $('#busca').value = ''; return render(); }
     if (alvo.matches('[data-prov-limpar]')) { est.filtroProvisao = null; return render(); }
+    if (alvo.dataset.filtroCartao) { est.filtroCartao = est.filtroCartao === alvo.dataset.filtroCartao ? null : alvo.dataset.filtroCartao; return render(); }
     if (alvo.dataset.prov) return acaoProvisao(alvo.dataset.prov, alvo.dataset.id);
     if (alvo.dataset.filtro) { est.filtro = est.filtro === alvo.dataset.filtro && alvo.dataset.filtro !== 'todos' ? 'todos' : alvo.dataset.filtro; return render(); }
     if (alvo.dataset.abrir) {

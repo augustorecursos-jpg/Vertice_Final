@@ -90,6 +90,13 @@
   const MAX_OBS = 1000;
   const limparObs = (v) => String(v ?? '').replace(/\r/g, '').trim().slice(0, MAX_OBS);
 
+  // ---------- cartões de crédito ----------
+  const CARTOES_SUGERIDOS = ['Nubank', 'PicPay', 'Itaú', 'Caixa', 'Mercado Pago', 'Inter', 'C6 Bank', 'Bradesco', 'Santander', 'Banco do Brasil', 'XP', 'Will Bank'];
+  /** Nome do cartão só existe em lançamentos/provisões da categoria cartão. */
+  const limparCartao = (categoria, v) => (categoria === 'cartao' ? String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, 40) : '');
+  const mesmoCartao = (a, b) => normalizarTexto(a) === normalizarTexto(b);
+  function normalizarTexto(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim(); }
+
   function novoId() {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
     return 'id-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
@@ -102,7 +109,8 @@
    */
   function gerar(f, gerarId = novoId) {
     const base = {
-      desc: String(f.desc).trim(), obs: limparObs(f.obs), categoria: f.categoria, provisao: f.provisao || null, pago: false, criadoEm: Date.now(),
+      desc: String(f.desc).trim(), obs: limparObs(f.obs), categoria: f.categoria, cartao: limparCartao(f.categoria, f.cartao),
+      provisao: f.provisao || null, pago: false, criadoEm: Date.now(),
     };
     if (f.recorrencia === 'unica' || !f.recorrencia) {
       return [{ ...base, id: gerarId(), grupo: null, parcela: null, centavos: f.centavos, ano: f.ano, mes: f.mes, dia: f.dia }];
@@ -145,6 +153,7 @@
       if (!ids.has(x.id)) return x;
       const novo = { ...x, desc: d.desc.trim(), obs: d.obs === undefined ? (x.obs || '') : limparObs(d.obs), centavos: d.centavos, categoria: d.categoria, dia: d.dia };
       if (d.provisao !== undefined) novo.provisao = d.provisao || null;
+      novo.cartao = limparCartao(d.categoria, d.cartao === undefined ? x.cartao : d.cartao);
       if (x.id === id && (escopo === 'este' || !x.grupo)) {
         novo.ano = d.ano; novo.mes = d.mes;
         if (x.grupo && !x.parcela) novo.grupo = null;
@@ -229,7 +238,7 @@
       id: String(x.id || novoId()), grupo: x.grupo ? String(x.grupo) : null, desc: String(x.desc || 'Sem descrição').slice(0, 120), obs: limparObs(x.obs),
       categoria: x.categoria, centavos, ano, mes, dia: Number.isInteger(dia) && dia >= 1 && dia <= 31 ? dia : 1,
       pago: !!x.pago, parcela: p, criadoEm: Number(x.criadoEm) || Date.now(),
-      provisao: x.provisao ? String(x.provisao).slice(0, 80) : null,
+      provisao: x.provisao ? String(x.provisao).slice(0, 80) : null, cartao: limparCartao(x.categoria, x.cartao),
     };
   }
 
@@ -273,13 +282,13 @@
 
   function csv(lista, ano) {
     const q = (s) => `"${String(s).replace(/"/g, '""')}"`;
-    const linhas = [['Vencimento', 'Descrição', 'Categoria', 'Valor', 'Situação', 'Observações'].join(';')];
+    const linhas = [['Vencimento', 'Descrição', 'Categoria', 'Cartão', 'Valor', 'Situação', 'Observações'].join(';')];
     lista.filter((l) => ano == null || l.ano === ano)
       .sort((a, b) => dataDe(a) - dataDe(b))
       .forEach((l) => {
         const c = CAT[l.categoria];
         linhas.push([
-          dataDe(l).toLocaleDateString('pt-BR'), q(titulo(l)), q(c.nome),
+          dataDe(l).toLocaleDateString('pt-BR'), q(titulo(l)), q(c.nome), q(l.cartao || ''),
           (l.centavos / 100).toFixed(2).replace('.', ','), l.pago ? c.feito : c.pendente, q(l.obs || ''),
         ].join(';'));
       });
@@ -302,6 +311,7 @@
       return {
         id: i === 0 ? grupo : gerarId(), grupo, nome: String(f.nome).trim().slice(0, 80), centavos: f.centavos,
         categoria: CAT[f.categoria]?.tipo === 'saida' ? f.categoria : null, auto: !!f.auto && CAT[f.categoria]?.tipo === 'saida',
+        cartao: limparCartao(f.categoria, f.cartao),
         obs: limparObs(f.obs), ano, mes, criadoEm: Date.now(),
       };
     });
@@ -317,7 +327,7 @@
     const categoria = CAT[x.categoria]?.tipo === 'saida' ? x.categoria : null;
     const id = String(x.id || novoId()).slice(0, 80);
     return {
-      id, grupo: String(x.grupo || id).slice(0, 80), nome, centavos, categoria, auto: !!x.auto && !!categoria,
+      id, grupo: String(x.grupo || id).slice(0, 80), nome, centavos, categoria, auto: !!x.auto && !!categoria, cartao: limparCartao(categoria, x.cartao),
       obs: limparObs(x.obs), ano, mes, criadoEm: Number(x.criadoEm) || Date.now(),
     };
   }
@@ -329,7 +339,8 @@
     const lancMes = lancamentos.filter((l) => l.ano === ano && l.mes === mes && CAT[l.categoria]?.tipo !== 'entrada');
     const r = doMes.map((p) => {
       const itens = lancMes.filter((l) => l.provisao === p.grupo
-        || (p.auto && l.categoria === p.categoria && !(l.provisao && grupos.has(l.provisao))));
+        || (p.auto && l.categoria === p.categoria && (!p.cartao || mesmoCartao(l.cartao, p.cartao))
+          && !(l.provisao && grupos.has(l.provisao))));
       const consumido = itens.reduce((a, l) => a + l.centavos, 0);
       const pago = itens.filter((l) => l.pago).reduce((a, l) => a + l.centavos, 0);
       return {
@@ -414,6 +425,7 @@
 
   return {
     LIMITES_PLANO, novoPlano, totaisPlano, limparPlano, csvPlano,
+    CARTOES_SUGERIDOS, mesmoCartao,
     MAX_PROVISOES, gerarProvisoes, limparProvisao, consumoProvisoes, reservadoProvisoes,
     VERSAO_DADOS, CATEGORIAS, CAT, MESES, MESES_CURTOS,
     lerValor, moeda, moedaCurta, valorParaCampo, dividir,

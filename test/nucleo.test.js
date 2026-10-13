@@ -140,7 +140,7 @@ test('backup novo descarta registros inválidos', () => {
 test('CSV usa ponto e vírgula e vírgula decimal', () => {
   const ls = N.gerar({ desc: 'Conta "luz"', centavos: 12345, categoria: 'fixa', ano: 2026, mes: 0, dia: 9 }, ids);
   const linhas = N.csv(ls, 2026).split('\r\n');
-  assert.equal(linhas[1], '09/01/2026;"Conta ""luz""";"Despesa fixa";123,45;A pagar;""');
+  assert.equal(linhas[1], '09/01/2026;"Conta ""luz""";"Despesa fixa";"";123,45;A pagar;""');
   const [comObs] = N.gerar({ desc: 'Luz', obs: 'Pago via Pix; ver "boleto"', centavos: 100, categoria: 'fixa', ano: 2026, mes: 0, dia: 9 }, ids);
   assert.ok(N.csv([comObs], 2026).endsWith(';"Pago via Pix; ver ""boleto"""'));
 });
@@ -243,4 +243,29 @@ test('provisões: limpeza e vínculo preservado nos lançamentos', () => {
   assert.equal(N.limpar(l).provisao, 'p1');
   assert.equal(N.editar([l], l.id, { desc: 'Presente', centavos: 100, categoria: 'variavel', dia: 1, ano: 2026, mes: 11 })[0].provisao, 'p1');
   assert.equal(N.editar([l], l.id, { desc: 'Presente', centavos: 100, categoria: 'variavel', dia: 1, ano: 2026, mes: 11, provisao: null })[0].provisao, null);
+});
+
+test('cartão: nome guardado só em lançamentos de cartão e mantido na série', () => {
+  const ls = N.gerar({ desc: 'Celular', centavos: 120000, categoria: 'cartao', cartao: '  Nubank ', ano: 2026, mes: 9, dia: 10, recorrencia: 'parcelada', quantidade: 3 }, ids);
+  assert.ok(ls.every((l) => l.cartao === 'Nubank'));
+  assert.equal(N.gerar({ desc: 'Luz', centavos: 1, categoria: 'variavel', cartao: 'Nubank', ano: 2026, mes: 9, dia: 1 }, ids)[0].cartao, '');
+  const d = { desc: 'Celular', centavos: 40000, categoria: 'cartao', dia: 10, ano: 2026, mes: 10 };
+  assert.deepEqual(N.editar(ls, ls[1].id, { ...d, cartao: 'PicPay' }, 'proximos').map((l) => l.cartao), ['Nubank', 'PicPay', 'PicPay']);
+  assert.equal(N.editar(ls, ls[0].id, d, 'este')[0].cartao, 'Nubank');
+  assert.equal(N.editar(ls, ls[0].id, { ...d, categoria: 'variavel' }, 'este')[0].cartao, '');
+  assert.equal(N.limpar({ ...ls[0], cartao: 'x'.repeat(90) }).cartao.length, 40);
+  assert.ok(N.csv(ls, 2026).split('\r\n')[1].includes(';"Cartão de crédito";"Nubank";'));
+  assert.ok(N.mesmoCartao('itau', ' Itaú '));
+});
+
+test('cartão: provisão automática por cartão conta só aquele cartão', () => {
+  const nu = N.gerarProvisoes({ nome: 'Nubank', centavos: 100000, categoria: 'cartao', cartao: 'Nubank', auto: true, ano: 2026, mes: 9 }, ids);
+  const pic = N.gerarProvisoes({ nome: 'PicPay', centavos: 50000, categoria: 'cartao', cartao: 'PicPay', auto: true, ano: 2026, mes: 9 }, ids);
+  const geral = N.gerarProvisoes({ nome: 'Todos os cartões', centavos: 300000, categoria: 'cartao', auto: true, ano: 2026, mes: 9 }, ids);
+  const g = (desc, cartao, centavos) => N.gerar({ desc, cartao, centavos, categoria: 'cartao', ano: 2026, mes: 9, dia: 5 }, ids)[0];
+  const ls = [g('A', 'nubank', 30000), g('B', 'Nubank', 20000), g('C', 'PicPay', 15000), g('D', 'Inter', 7000), g('E', '', 1000)];
+  const c = Object.fromEntries(N.consumoProvisoes(ls, [...nu, ...pic, ...geral], 2026, 9).map((x) => [x.provisao.nome, x.consumido]));
+  assert.deepEqual(c, { Nubank: 50000, PicPay: 15000, 'Todos os cartões': 73000 });
+  assert.equal(N.limparProvisao({ ...nu[0], categoria: 'variavel' }).cartao, '');
+  assert.equal(N.limparProvisao(nu[0]).cartao, 'Nubank');
 });

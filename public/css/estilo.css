@@ -330,6 +330,18 @@ table.t td.pos { color: var(--verde); }
 table.t td.neg { color: var(--vermelho); }
 table.t tr:last-child td { border-bottom: 0; }
 
+/* ---------- cartões ---------- */
+.filtros-cartao:empty { display: none; }
+.filtros-cartao { margin-top: -.4em; align-items: center; }
+.filtros-cartao .rot-cartoes { display: inline-flex; align-items: center; gap: .35em; font-size: .78rem; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: #c2410c; margin-right: .2em; }
+.filtros-cartao button b { font-variant-numeric: tabular-nums; }
+.filtros-cartao button.ativo { background: #c2410c; border-color: #c2410c; }
+.atalhos-cartao { display: flex; flex-wrap: wrap; gap: .35em; margin-top: .45em; }
+.atalhos-cartao:empty { display: none; }
+.atalhos-cartao button { border: 1px solid var(--borda-forte); background: var(--papel); border-radius: 99px; padding: .25em .75em; font: inherit; font-size: .8rem; font-weight: 700; color: var(--suave); cursor: pointer; }
+.atalhos-cartao button:hover { border-color: #e9a07f; color: #c2410c; }
+.atalhos-cartao button.ativo { background: #fff1ea; border-color: #c2410c; color: #c2410c; }
+
 /* ---------- provisões ---------- */
 .provisoes .cartao-cab { margin-bottom: .8em; }
 .resumo-prov { display: flex; gap: .4em 1.4em; flex-wrap: wrap; font-size: .88rem; color: var(--suave); margin-bottom: .9em; }

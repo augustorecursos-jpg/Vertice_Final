@@ -76,6 +76,7 @@
             </div>
           </div>
           <div class="filtros" id="filtros" role="group" aria-label="Filtrar"></div>
+          <div class="filtros filtros-cartao" id="filtros-cartao" role="group" aria-label="Filtrar por cartão"></div>
           <div class="lista" id="lista"></div>
           <div class="rodape-lista" id="rodape-lista"></div>
         </div>
@@ -226,6 +227,7 @@
 
 <button type="button" class="fab" data-novo aria-label="Novo lançamento"><i data-ic="mais"></i></button>
 <div id="toast" role="status" aria-live="polite"></div>
+<datalist id="lista-cartoes"></datalist>
 
 <!-- ================= MODAL DE LANÇAMENTO ================= -->
 <template id="tpl-lancamento">
@@ -254,6 +256,11 @@
           <label class="rotulo" for="f-data">Vencimento</label>
           <input type="date" id="f-data" required>
           <p class="erro-campo" id="e-data"></p>
+        </div>
+        <div class="inteiro" id="bloco-cartao" hidden>
+          <label class="rotulo" for="f-cartao">Qual cartão?</label>
+          <input type="text" id="f-cartao" maxlength="40" list="lista-cartoes" placeholder="Ex.: Nubank, PicPay, Itaú, Caixa, Mercado Pago" autocomplete="off">
+          <div class="atalhos-cartao" id="atalhos-cartao"></div>
         </div>
         <div class="inteiro">
           <div class="rotulo-linha"><label class="rotulo" for="f-obs">Observações <small>(opcional)</small></label><small class="contador" id="c-obs" aria-live="polite"></small></div>
