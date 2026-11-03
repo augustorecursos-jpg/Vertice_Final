@@ -8,6 +8,7 @@ const crypto = require('node:crypto');
 const express = require('express');
 const { db, DATA_DIR, hashSenha, conferirSenha, senhaTemporaria, lerConfig, gravarConfig, CONFIG_PADRAO } = require('./db');
 const N = require('./public/js/nucleo.js');
+const E = require('./public/js/nucleo-empresa.js');
 
 const PORT = Number(process.env.PORT) || 3000;
 const PRODUCAO = process.env.NODE_ENV === 'production';
@@ -76,7 +77,10 @@ function definirSessao(res, usuario) {
 function usuarioDaSessao(req) {
   const s = verificar(lerCookies(req)[COOKIE]);
   const u = s && db.prepare('SELECT * FROM usuarios WHERE id = ? AND ativo = 1').get(s.uid);
-  return u && u.senha_hash.slice(-12) === s.v ? u : null;
+  if (!u || u.senha_hash.slice(-12) !== s.v) return null;
+  // Bloquear a empresa derruba na hora a sessão de todos os usuários dela.
+  if (u.empresa_id && !db.prepare('SELECT ativo FROM empresas WHERE id = ?').get(u.empresa_id)?.ativo) return null;
+  return u;
 }
 
 function exigirLogin(req, res, next) {
@@ -184,7 +188,8 @@ app.post('/api/login', (req, res) => {
   const login = texto(req.body?.login, 80);
   const u = login && db.prepare('SELECT * FROM usuarios WHERE login = ?').get(login);
   const senhaOk = u && conferirSenha(req.body?.senha || '', u.senha_hash);
-  if (!senhaOk || !u.ativo) {
+  const empresaBloqueada = u?.empresa_id && !db.prepare('SELECT ativo FROM empresas WHERE id = ?').get(u.empresa_id)?.ativo;
+  if (!senhaOk || !u.ativo || empresaBloqueada) {
     const atual = f && f.ate > Date.now() ? f : { n: 0 };
     falhas.set(ip, { n: atual.n + 1, ate: Date.now() + 10 * 60e3 });
     // Conta bloqueada só é revelada para quem acertou a senha.
@@ -192,7 +197,11 @@ app.post('/api/login', (req, res) => {
   }
   falhas.delete(ip);
   db.prepare("UPDATE usuarios SET ultimo_acesso = datetime('now') WHERE id = ?").run(u.id);
-  if (u.perfil !== 'admin' && !u.assinatura_vence) {
+  if (u.empresa_id) {
+    // Em empresas a assinatura é da empresa: começa no primeiro acesso de qualquer usuário dela.
+    const hoje = hojeISO();
+    db.prepare('UPDATE empresas SET assinatura_inicio = ?, assinatura_vence = ? WHERE id = ? AND assinatura_vence IS NULL').run(hoje, somarDias(hoje, DIAS_ASSINATURA), u.empresa_id);
+  } else if (u.perfil !== 'admin' && !u.assinatura_vence) {
     const hoje = hojeISO();
     db.prepare('UPDATE usuarios SET assinatura_inicio = ?, assinatura_vence = ? WHERE id = ?').run(hoje, somarDias(hoje, DIAS_ASSINATURA), u.id);
   }
@@ -207,7 +216,11 @@ app.post('/api/logout', (req, res) => {
   res.json({ ok: true });
 });
 
-app.get('/api/eu', exigirLogin, (req, res) => res.json(publico(req.usuario)));
+app.get('/api/eu', exigirLogin, (req, res) => {
+  const u = req.usuario;
+  const emp = u.empresa_id && db.prepare('SELECT id, nome, plano FROM empresas WHERE id = ?').get(u.empresa_id);
+  res.json({ ...publico(u), empresa: emp ? { id: emp.id, nome: emp.nome, plano: emp.plano, papel: u.papel || 'leitura' } : null });
+});
 
 app.put('/api/eu', exigirLogin, (req, res) => {
   const nome = texto(req.body?.nome, 120);
@@ -279,7 +292,7 @@ app.put('/api/dados', exigirLogin, (req, res) => {
 // ---------- administração de contas ----------
 app.get('/api/admin/usuarios', exigirAdmin, (req, res) => {
   const { diasAviso } = lerConfig();
-  res.json(db.prepare('SELECT * FROM usuarios ORDER BY ativo DESC, nome COLLATE NOCASE').all().map((u) => paraAdmin(u, diasAviso)));
+  res.json(db.prepare('SELECT * FROM usuarios WHERE empresa_id IS NULL ORDER BY ativo DESC, nome COLLATE NOCASE').all().map((u) => paraAdmin(u, diasAviso)));
 });
 
 app.post('/api/admin/usuarios', exigirAdmin, (req, res) => {
@@ -291,10 +304,22 @@ app.post('/api/admin/usuarios', exigirAdmin, (req, res) => {
   if (!nome) return res.status(400).json({ erro: 'Informe o nome.' });
   if (!loginValido(login)) return res.status(400).json({ erro: 'Login inválido: use de 3 a 80 letras, números, ponto, hífen, _ ou @ (pode ser o e-mail).' });
   if (db.prepare('SELECT 1 FROM usuarios WHERE login = ?').get(login)) return res.status(409).json({ erro: 'Esse login já existe.' });
+  // Usuário de empresa: papel e centros definidos só pela AR, dentro do limite do plano.
+  let empresa = null, papel = null, centros = '[]';
+  if (req.body?.empresaId != null) {
+    empresa = empresas.empresaPorId(Number(req.body.empresaId));
+    if (!empresa) return res.status(404).json({ erro: 'Empresa não encontrada.' });
+    papel = req.body.papel;
+    const acesso = empresas.validarAcesso(empresa.id, papel, req.body.centros);
+    if (acesso.erro) return res.status(400).json({ erro: acesso.erro });
+    const limite = empresas.cabeNoPlano(empresa, papel, 1);
+    if (limite) return res.status(400).json({ erro: limite });
+    centros = JSON.stringify(acesso.centros);
+  }
   const senha = senhaTemporaria();
-  const r = db.prepare('INSERT INTO usuarios (nome, login, senha_hash, perfil, trocar_senha, telefone) VALUES (?, ?, ?, ?, 1, ?)')
-    .run(nome, login, hashSenha(senha), perfil, telefone);
-  auditar(req, 'criou usuário', `${login} (${perfil})`);
+  const r = db.prepare('INSERT INTO usuarios (nome, login, senha_hash, perfil, trocar_senha, telefone, empresa_id, papel, centros) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)')
+    .run(nome, login, hashSenha(senha), empresa ? 'usuario' : perfil, telefone, empresa?.id ?? null, papel, centros);
+  auditar(req, 'criou usuário', empresa ? `${login} (${papel} em ${empresa.nome})` : `${login} (${perfil})`);
   res.status(201).json({ id: Number(r.lastInsertRowid), login, senhaTemporaria: senha });
 });
 
@@ -320,10 +345,22 @@ app.put('/api/admin/usuarios/:id', exigirAdmin, (req, res) => {
   const u = buscarAlvo(req, res);
   if (!u) return;
   const nome = texto(req.body?.nome, 120) || u.nome;
-  const perfil = req.body?.perfil ? (req.body.perfil === 'admin' ? 'admin' : 'usuario') : u.perfil;
+  // Usuário de empresa nunca vira administrador.
+  const perfil = u.empresa_id ? 'usuario' : req.body?.perfil ? (req.body.perfil === 'admin' ? 'admin' : 'usuario') : u.perfil;
   const ativo = req.body?.ativo === undefined ? u.ativo : (req.body.ativo ? 1 : 0);
   const erro = validarMudancaAdmin(req, u, { perfil, ativo });
   if (erro) return res.status(400).json({ erro });
+  let papel = u.papel, centros = u.centros;
+  if (u.empresa_id) {
+    const empresa = empresas.empresaPorId(u.empresa_id);
+    papel = req.body?.papel ?? u.papel;
+    const acesso = empresas.validarAcesso(u.empresa_id, papel, req.body?.centros ?? empresas.centrosDe(u));
+    if (acesso.erro) return res.status(400).json({ erro: acesso.erro });
+    const pesaAgora = ativo && E.PAPEL[papel]?.pago, pesavaAntes = u.ativo && E.PAPEL[u.papel]?.pago;
+    const limite = pesaAgora && !pesavaAntes && empresas.cabeNoPlano(empresa, papel, ativo, u.id);
+    if (limite) return res.status(400).json({ erro: limite });
+    centros = JSON.stringify(acesso.centros);
+  }
   let telefone = u.telefone || '';
   if (req.body?.telefone !== undefined) {
     telefone = req.body.telefone ? telefoneValido(req.body.telefone) : '';
@@ -334,9 +371,10 @@ app.put('/api/admin/usuarios/:id', exigirAdmin, (req, res) => {
     vence = req.body.assinaturaVence || null;
     if (vence && !dataValida(vence)) return res.status(400).json({ erro: 'Data de vencimento inválida.' });
   }
-  db.prepare('UPDATE usuarios SET nome = ?, perfil = ?, ativo = ?, telefone = ?, assinatura_vence = ?, assinatura_inicio = COALESCE(assinatura_inicio, CASE WHEN ? IS NULL THEN NULL ELSE ? END) WHERE id = ?')
-    .run(nome, perfil, ativo, telefone, vence, vence, hojeISO(), u.id);
+  db.prepare('UPDATE usuarios SET nome = ?, perfil = ?, ativo = ?, telefone = ?, assinatura_vence = ?, assinatura_inicio = COALESCE(assinatura_inicio, CASE WHEN ? IS NULL THEN NULL ELSE ? END), papel = ?, centros = ? WHERE id = ?')
+    .run(nome, perfil, ativo, telefone, vence, vence, hojeISO(), papel, centros, u.id);
   const mudancas = [
+    papel !== u.papel && `papel ${papel}`, centros !== u.centros && 'centros de custo',
     vence !== u.assinatura_vence && `vencimento ${vence ? vence.split('-').reverse().join('/') : 'removido'}`,
     telefone !== (u.telefone || '') && 'telefone',
     nome !== u.nome && `nome "${nome}"`,
@@ -355,6 +393,7 @@ app.post('/api/admin/usuarios/:id/renovar', exigirAdmin, (req, res) => {
   const u = buscarAlvo(req, res);
   if (!u) return;
   if (u.perfil === 'admin') return res.status(400).json({ erro: 'Administradores não têm assinatura.' });
+  if (u.empresa_id) return res.status(400).json({ erro: 'Usuários de empresa seguem a assinatura da empresa: renove pela empresa.' });
   const periodo = req.body?.periodo ?? 'mensal';
   if (!N.PERIODO[periodo]) return res.status(400).json({ erro: 'Período inválido.' });
   const plano = N.PLANO_ASSINATURA[u.plano] ? u.plano : 'pf';
@@ -376,7 +415,9 @@ app.post('/api/admin/usuarios/:id/renovar', exigirAdmin, (req, res) => {
 app.get('/api/admin/config', exigirAdmin, (req, res) => res.json({ ...lerConfig(), mensagemPadrao: CONFIG_PADRAO.mensagem_aviso }));
 
 app.put('/api/admin/config', exigirAdmin, (req, res) => {
-  const { mensalidade, diasAviso, mensagem, precos } = req.body || {};
+  const { mensalidade, diasAviso, mensagem, precos, whatsappAR } = req.body || {};
+  const whats = whatsappAR === undefined ? undefined : (whatsappAR ? telefoneValido(whatsappAR) : '');
+  if (whats === null) return res.status(400).json({ erro: 'WhatsApp da AR inválido: use DDD + número.' });
   if (mensalidade !== undefined && !(Number.isInteger(mensalidade) && mensalidade > 0 && mensalidade <= 10000000)) {
     return res.status(400).json({ erro: 'Valor da mensalidade inválido.' });
   }
@@ -393,6 +434,7 @@ app.put('/api/admin/config', exigirAdmin, (req, res) => {
     gravarConfig('precos_planos', JSON.stringify(tabela));
   }
   if (diasAviso !== undefined) gravarConfig('dias_aviso', diasAviso);
+  if (whats !== undefined) gravarConfig('whatsapp_ar', whats);
   if (mensagem !== undefined) gravarConfig('mensagem_aviso', String(mensagem).replace(/\r/g, '').trim().slice(0, 2000));
   auditar(req, 'alterou as configurações de assinatura');
   res.json(lerConfig());
@@ -429,6 +471,11 @@ app.get('/api/admin/auditoria', exigirAdmin, (req, res) => {
 });
 
 // ---------- erros ----------
+// ---------- Vértice Empresas ----------
+const empresas = require('./empresas')(app, {
+  db, exigirLogin, exigirAdmin, auditar, lerConfig, transacao, hojeISO, somarDias, diasAte, dataValida, texto, telefoneValido,
+});
+
 app.use('/api', (req, res) => res.status(404).json({ erro: 'Rota não encontrada.' }));
 app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
   if (err.type === 'entity.too.large') return res.status(413).json({ erro: 'Dados grandes demais.' });

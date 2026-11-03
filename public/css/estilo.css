@@ -649,6 +649,24 @@ label.periodo .eco-tag { position: absolute; top: -.75em; right: .5em; backgroun
 .resumo-renov svg.ic { vertical-align: -.15em; }
 @media (max-width: 640px) { fieldset.periodos { grid-template-columns: 1fr 1fr; gap: .9em .6em; } }
 
+/* ---------- empresas (admin) ---------- */
+.tab-empresas tbody tr { cursor: pointer; }
+tr.sel-linha td { background: var(--claro-50); }
+tr.sel-linha td:first-child { box-shadow: inset 3px 0 0 var(--primaria); }
+fieldset.planos-emp { grid-template-columns: repeat(3, 1fr); }
+fieldset.papeis-sel { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; grid-template-columns: 1fr 1fr; gap: .5em; }
+fieldset.papeis-sel legend { padding: 0; margin-bottom: .45em; }
+label.papel-op { position: relative; cursor: pointer; display: block; }
+label.papel-op input { position: absolute; opacity: 0; pointer-events: none; }
+label.papel-op span { display: block; border: 2px solid var(--borda); border-radius: 12px; padding: .55em .7em; height: 100%; }
+label.papel-op b { display: block; color: var(--marinho-900); }
+label.papel-op small { display: block; color: var(--suave); font-size: .78rem; line-height: 1.35; }
+label.papel-op input:checked + span { border-color: var(--primaria); background: var(--claro-50); box-shadow: 0 0 0 3px rgba(32,184,213,.18); }
+label.papel-op input:focus-visible + span { outline: 2px solid var(--claro); outline-offset: 2px; }
+#ue-centros-campo { border: 0; padding: 0; margin: 0; min-width: 0; }
+#ue-centros-campo legend { padding: 0; margin-bottom: .45em; }
+@media (max-width: 640px) { fieldset.planos-emp, fieldset.papeis-sel { grid-template-columns: 1fr; } }
+
 /* ---------- simulador ---------- */
 .sim-cab .sim-acoes { gap: .5em; }
 .sim-cab .sim-cenarios { order: 4; }
@@ -764,7 +782,7 @@ ul.metas small { grid-column: 1 / -1; color: var(--suave); font-size: .84rem; li
   #toast { bottom: 6em; }
 }
 @media (max-width: 640px) {
-  .lateral nav .rot-longo { display: none; }
+  .lateral nav .rot-longo { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .lateral nav .rot-curto { display: inline; }
   .cards { grid-template-columns: 1fr 1fr; gap: .7em; }
   .kpi.destaque { grid-column: 1 / -1; }

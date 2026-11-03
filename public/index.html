@@ -23,13 +23,14 @@
       <div class="grupo">Finanças</div>
       <a href="#mes" data-secao="mes"><i data-ic="painel"></i> <span>Mês</span> <span class="cont" id="cont-atrasados" hidden></span></a>
       <a href="#ano" data-secao="ano"><i data-ic="grafico"></i> <span>Visão anual</span></a>
-      <a href="#planos" data-secao="planos"><i data-ic="alvo"></i> <span class="rot-longo">Planejamentos</span><span class="rot-curto">Planos</span></a>
+      <a href="#planos" data-secao="planos"><i data-ic="alvo"></i> <span class="rot-longo">Planejamentos</span><span class="rot-curto" aria-hidden="true">Planos</span></a>
       <a href="#sim" data-secao="sim"><i data-ic="brilho"></i> <span>Simulador</span></a>
       <a href="#dashboard" data-secao="dashboard"><i data-ic="pizza"></i> <span>Dashboard</span></a>
       <div class="grupo">Conta</div>
-      <a href="#ajustes" data-secao="ajustes"><i data-ic="ajustes"></i> <span class="rot-longo">Minha conta</span><span class="rot-curto">Conta</span></a>
+      <a href="#ajustes" data-secao="ajustes"><i data-ic="ajustes"></i> <span class="rot-longo">Minha conta</span><span class="rot-curto" aria-hidden="true">Conta</span></a>
       <div class="grupo" id="grupo-admin" hidden>Administração</div>
-      <a href="#usuarios" data-secao="usuarios" id="link-admin" hidden><i data-ic="usuarios"></i> <span>Usuários</span> <span class="cont aviso" id="cont-assinaturas" hidden></span></a>
+      <a href="#usuarios" data-secao="usuarios" id="link-admin" hidden><i data-ic="usuarios"></i> <span class="rot-longo">Clientes pessoa física</span><span class="rot-curto" aria-hidden="true">Clientes</span> <span class="cont aviso" id="cont-assinaturas" hidden></span></a>
+      <a href="#empresas" data-secao="empresas" id="link-empresas" hidden><i data-ic="maleta"></i> <span class="rot-longo">Empresas e usuários</span><span class="rot-curto" aria-hidden="true">Empresas</span> <span class="cont aviso" id="cont-empresas" hidden></span></a>
     </nav>
     <div class="cartao-usuario">
       <span class="av" id="av-usuario">V</span>
@@ -187,7 +188,7 @@
         <div class="cartao">
           <div class="cartao-cab">
             <div>
-              <h2><span class="bolha"><i data-ic="usuarios"></i></span> Usuários</h2>
+              <h2><span class="bolha"><i data-ic="usuarios"></i></span> Clientes pessoa física e administradores</h2>
               <p id="resumo-usuarios">Só administradores criam contas. Não existe cadastro público.</p>
             </div>
             <button type="button" class="btn" data-novo-usuario><i data-ic="mais"></i> Novo usuário</button>
@@ -206,6 +207,8 @@
             <div class="inteiro" style="min-width:0"><span class="rotulo">Preço total de cada período</span>
               <div class="rolar-x"><table class="precos" id="cfg-precos"></table></div>
               <p class="dica">O desconto é calculado sobre o preço mensal × meses. Os planos de empresas valem para as contas de empresa.</p></div>
+            <div><label class="rotulo" for="cfg-whats">WhatsApp da AR <small>(recebe as solicitações das empresas)</small></label>
+              <input type="text" id="cfg-whats" inputmode="tel" maxlength="20" placeholder="(11) 98765-4321"></div>
             <div><label class="rotulo" for="cfg-dias">Avisar quando faltarem <small>(dias)</small></label>
               <input type="number" id="cfg-dias" min="1" max="30" inputmode="numeric"></div>
             <div class="inteiro">
@@ -230,6 +233,8 @@
           <ul class="lista-auditoria" id="auditoria"></ul>
         </div>
       </section>
+      <!-- ================= EMPRESAS (admin) ================= -->
+      <section data-secao="empresas" hidden><div id="adm-empresas"></div></section>
     </main>
   </div>
 </div>
@@ -310,6 +315,7 @@
 </template>
 
 <script src="js/nucleo.js"></script>
+<script src="js/nucleo-empresa.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

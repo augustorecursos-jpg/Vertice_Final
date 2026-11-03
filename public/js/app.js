@@ -10,6 +10,9 @@
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   const ICONES = {
+    maleta: '<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>',
+    pasta: '<path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
+    impressora: '<path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>',
     painel: '<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>',
     grafico: '<path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>',
     ajustes: '<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
@@ -145,7 +148,7 @@
   const agora = new Date();
   const est = {
     secao: 'mes', ano: agora.getFullYear(), mes: agora.getMonth(),
-    filtro: 'todos', filtroProvisao: null, filtroCartao: null, painelAno: false, painelCats: new Set(), painelAbertas: new Set(), painelAba: 'resumo', gastosAbertos: new Set(), sim: { base: 'mes', ativo: null, cen: { valores: {}, tipos: {} } }, simTiposAberto: false, busca: '', ordem: prefs.ordem, abertas: new Set(),
+    filtro: 'todos', filtroProvisao: null, filtroCartao: null, painelAno: false, painelCats: new Set(), painelAbertas: new Set(), painelAba: 'resumo', gastosAbertos: new Set(), sim: { base: 'mes', ativo: null, cen: { valores: {}, tipos: {} } }, simTiposAberto: false, empresaSel: null, busca: '', ordem: prefs.ordem, abertas: new Set(),
   };
 
   // ---------- toast ----------
@@ -437,7 +440,7 @@
   }
   function lerHash() {
     const [s, sub] = location.hash.replace('#', '').split('/');
-    est.secao = ['mes', 'dashboard', 'ano', 'planos', 'sim', 'ajustes'].includes(s) || (s === 'usuarios' && eu?.perfil === 'admin') ? s : 'mes';
+    est.secao = ['mes', 'dashboard', 'ano', 'planos', 'sim', 'ajustes'].includes(s) || (['usuarios', 'empresas'].includes(s) && eu?.perfil === 'admin') ? s : 'mes';
     est.plano = s === 'planos' && sub ? decodeURIComponent(sub) : null;
     render();
     window.scrollTo({ top: 0 });
@@ -456,6 +459,7 @@
     if (est.secao === 'usuarios') renderUsuarios();
     if (est.secao === 'planos') renderPlanos();
     if (est.secao === 'sim') renderSimulador();
+    if (est.secao === 'empresas') renderEmpresas();
   }
 
   function atrasados() {
@@ -1846,6 +1850,7 @@
 
       if (!$('#cfg-assin').contains(document.activeElement)) {
         desenharPrecos(cfg.precos);
+        $('#cfg-whats').value = formatarTelefone(cfg.whatsappAR);
         $('#cfg-dias').value = cfg.diasAviso;
         $('#cfg-msg').value = cfg.mensagem;
       }
@@ -1949,7 +1954,7 @@
       if (ruim) { ruim.focus(); return toast('Confira os preços: todos precisam ser maiores que zero, por exemplo 11,99.', { erro: true }); }
       try {
         configAssin = { ...configAssin, ...(await api('PUT', '/api/admin/config', {
-          precos, diasAviso: Math.floor(+$('#cfg-dias').value), mensagem: $('#cfg-msg').value,
+          precos, diasAviso: Math.floor(+$('#cfg-dias').value), mensagem: $('#cfg-msg').value, whatsappAR: $('#cfg-whats').value.trim(),
         })) };
         toast('Configurações de assinatura salvas.');
         renderUsuarios();
@@ -1985,7 +1990,7 @@
     });
   }
 
-  function renovarAssinatura(u) {
+  function renovarAssinatura(u, { url = `/api/admin/usuarios/${u.id}/renovar`, depois = renderUsuarios } = {}) {
     const plano = planoDe(u), pl = N.PLANO_ASSINATURA[plano];
     const hoje = new Date().toLocaleDateString('sv-SE');
     const base = u.assinaturaVence && u.assinaturaVence > hoje ? u.assinaturaVence : hoje;
@@ -2023,12 +2028,12 @@
       const valor = N.lerValor($('#renov-valor', modal).value);
       if (!(Number.isInteger(valor) && valor >= 0)) { $('#renov-erro', modal).textContent = 'Informe o valor recebido, por exemplo 59,94.'; return; }
       try {
-        const r = await api('POST', `/api/admin/usuarios/${u.id}/renovar`, { periodo: periodo(), valor });
+        const r = await api('POST', url, { periodo: periodo(), valor });
         fechar();
         const pe = N.PERIODO[r.periodo].nome.toLowerCase();
         if (!u.ativo) toast(`Renovada (${pe}) até ${dataBR(r.assinaturaVence)}. O acesso continua bloqueado: use “Desbloquear”.`, { tempo: 8000 });
         else toast(`Assinatura ${pe} renovada até ${dataBR(r.assinaturaVence)}.`);
-        renderUsuarios();
+        depois();
       } catch (er) { $('#renov-erro', modal).textContent = er.message; }
     });
   }
@@ -2081,10 +2086,12 @@
   }
 
   async function acaoUsuario(acao, id) {
-    const u = usuarios.find((x) => x.id === id);
+    const u = usuarios.find((x) => x.id === id) || usuariosEmpresa.find((x) => x.id === id);
+    const daEmpresa = !usuarios.includes(u);
+    const atualizarAdmin = () => (daEmpresa ? renderEmpresas() : renderUsuarios());
     if (!u) return;
     try {
-      if (acao === 'editar') return formUsuario(u);
+      if (acao === 'editar') return daEmpresa ? formUsuarioEmpresa(empSel(), u) : formUsuario(u);
       if (acao === 'aviso') return enviarAviso(u);
       if (acao === 'renovar') return renovarAssinatura(u);
       if (acao === 'senha') {
@@ -2092,7 +2099,7 @@
           texto: `<b>${esc(u.nome)}</b> sai de todos os dispositivos e só entra de novo com a senha temporária que vamos gerar agora.` });
         if (!ok) return;
         const r = await api('POST', `/api/admin/usuarios/${id}/senha`, {});
-        renderUsuarios();
+        atualizarAdmin();
         return mostrarSenha('Senha redefinida', u, r.senhaTemporaria);
       }
       if (acao === 'bloquear' || acao === 'desbloquear') {
@@ -2104,17 +2111,237 @@
         if (!ok) return;
         await api('PUT', `/api/admin/usuarios/${id}`, { ativo: !bloquear });
         toast(bloquear ? 'Usuário bloqueado.' : 'Usuário desbloqueado.');
-        return renderUsuarios();
+        return atualizarAdmin();
       }
       if (acao === 'excluir') {
         const ok = await confirmar({ titulo: 'Excluir usuário?', perigo: true, botao: 'Excluir definitivamente', palavra: u.login,
-          texto: `A conta de <b>${esc(u.nome)}</b> e <b>todos os lançamentos dela</b> serão apagados. Isso não pode ser desfeito. Se quiser só impedir o acesso, use “Bloquear”.` });
+          texto: daEmpresa ? `A conta de <b>${esc(u.nome)}</b> será apagada. Os lançamentos da empresa continuam.` : `A conta de <b>${esc(u.nome)}</b> e <b>todos os lançamentos dela</b> serão apagados. Isso não pode ser desfeito. Se quiser só impedir o acesso, use “Bloquear”.` });
         if (!ok) return;
         await api('DELETE', `/api/admin/usuarios/${id}`, { confirmar: u.login });
         toast('Usuário excluído.');
-        return renderUsuarios();
+        return atualizarAdmin();
       }
     } catch (e) { toast(e.message, { erro: true }); }
+  }
+
+  // ---------- administração de empresas (só admin AR) ----------
+  // A AR controla tudo: empresas, planos, assinaturas, usuários, papéis e centros de custo.
+  const E = window.NucleoEmpresa;
+  let empresas = [], usuariosEmpresa = [], solicitacoes = [];
+  const empSel = () => empresas.find((x) => x.id === est.empresaSel);
+  const cnpjBR = (c) => (c && c.length === 14 ? `${c.slice(0, 2)}.${c.slice(2, 5)}.${c.slice(5, 8)}/${c.slice(8, 12)}-${c.slice(12)}` : c || '');
+  const mensalEquivalente = (e) => {
+    const pe = N.PERIODO[e.periodo] || N.PERIODO.mensal;
+    const valor = e.ultimoValor != null ? e.ultimoValor : N.precoPeriodo(configAssin.precos, e.plano, pe.id).total;
+    return Math.round(valor / pe.meses);
+  };
+
+  function seloEmpresas() {
+    const n = empresas.filter((e) => e.ativo && ['aviso', 'hoje', 'vencida'].includes(e.assinatura?.cod)).length + solicitacoes.length;
+    const c = $('#cont-empresas');
+    c.hidden = !n; c.textContent = n; c.title = `${n} item(ns) precisando de atenção`;
+  }
+
+  async function renderEmpresas() {
+    const raiz = $('#adm-empresas');
+    if (!empresas.length) raiz.innerHTML = '<div class="cartao"><p class="suave">Carregando…</p></div>';
+    try {
+      const [lista, sol, cfg] = await Promise.all([api('GET', '/api/admin/empresas'), api('GET', '/api/admin/solicitacoes'), api('GET', '/api/admin/config')]);
+      empresas = lista; solicitacoes = sol; configAssin = cfg;
+      if (est.empresaSel && !empSel()) est.empresaSel = null;
+      if (!est.empresaSel && empresas.length) est.empresaSel = empresas[0].id;
+      usuariosEmpresa = est.empresaSel ? await api('GET', `/api/admin/empresas/${est.empresaSel}/usuarios`) : [];
+    } catch (e) { raiz.innerHTML = `<div class="cartao"><p class="txt-erro">${esc(e.message)}</p></div>`; return; }
+    seloEmpresas();
+    const ativas = empresas.filter((e) => e.ativo);
+    const atencao = ativas.filter((e) => ['aviso', 'hoje', 'vencida'].includes(e.assinatura?.cod));
+    const totUsuarios = empresas.reduce((a, e) => a + e.usuarios, 0);
+    const receita = ativas.reduce((a, e) => a + mensalEquivalente(e), 0);
+    const e = empSel();
+
+    const linhas = empresas.map((x) => {
+      const pl = N.PLANO_ASSINATURA[x.plano], pe = N.PERIODO[x.periodo];
+      const valor = x.ultimoValor != null ? x.ultimoValor : N.precoPeriodo(configAssin.precos, x.plano, x.periodo).total;
+      return `<tr class="${x.id === est.empresaSel ? 'sel-linha' : ''} ${x.ativo ? '' : 'inativo'}" data-emp="${x.id}">
+        <td><div class="pessoa"><span class="av">${esc(iniciais(x.nome))}</span><div><b>${esc(x.nome)}</b><small>${x.cnpj ? `CNPJ ${esc(cnpjBR(x.cnpj))}` : 'sem CNPJ'}</small></div></div></td>
+        <td><span class="tag indigo">${esc(pl.nome)} · ${esc(pe.nome)} · ${moeda(valor)}</span></td>
+        <td>${x.usuariosPagos} de ${x.limiteUsuarios}${x.usuarios - x.usuariosPagos ? ` <small class="suave">+ ${x.usuarios - x.usuariosPagos} leitura/bloq.</small>` : ''}</td>
+        <td class="cel-assin">${tagAssinatura(x)}</td>
+        <td>${x.ativo ? `<span class="tag ok">${ic('check')} Ativa</span>` : `<span class="tag erro">${ic('cadeado')} Bloqueada</span>`}${x.solicitacoes ? ` <span class="tag aviso" title="Solicitações abertas">${x.solicitacoes} pedido${x.solicitacoes > 1 ? 's' : ''}</span>` : ''}</td>
+        <td class="acoes"><button type="button" class="btn fantasma icone peq" data-emp-abrir="${x.id}" title="Abrir" aria-label="Abrir ${esc(x.nome)}">${ic('dir')}</button></td></tr>`;
+    }).join('');
+
+    const nomeCentros = (u) => (u.papel !== 'gestor' ? 'Todos' : u.centros.map((id) => e?.centros.find((c) => c.id === id)?.nome || '?').join(', '));
+    const usuariosHtml = usuariosEmpresa.map((u) => `<tr class="${u.ativo ? '' : 'inativo'}">
+        <td><div class="pessoa"><span class="av">${esc(iniciais(u.nome))}</span><div><b>${esc(u.nome)}</b><small>${esc(u.login)}</small></div></div></td>
+        <td><span class="tag ${u.papel === 'dono' ? 'indigo' : u.papel === 'leitura' ? 'neutra' : 'info'}">${esc(E.PAPEL[u.papel].nome)}</span></td>
+        <td>${esc(nomeCentros(u))}</td>
+        <td>${!u.ativo ? `<span class="tag erro">${ic('cadeado')} Bloqueado</span>` : u.trocarSenha ? `<span class="tag aviso">${ic('relogio')} ${u.ultimoAcesso ? 'Senha temporária' : 'Aguardando 1º acesso'}</span>` : `<span class="tag ok">${ic('check')} Ativo</span>`}</td>
+        <td class="esconder-cel">${u.ultimoAcesso ? esc(dataHora(u.ultimoAcesso)) : '<span class="suave">Nunca entrou</span>'}</td>
+        <td class="acoes">
+          <button type="button" class="btn fantasma icone peq" data-usr="editar" data-uid="${u.id}" title="Editar papel e acesso" aria-label="Editar ${esc(u.nome)}">${ic('editar')}</button>
+          <button type="button" class="btn fantasma icone peq" data-usr="senha" data-uid="${u.id}" title="Redefinir senha" aria-label="Redefinir senha de ${esc(u.nome)}">${ic('chave')}</button>
+          <button type="button" class="btn fantasma icone peq" data-usr="${u.ativo ? 'bloquear' : 'desbloquear'}" data-uid="${u.id}" title="${u.ativo ? 'Bloquear' : 'Desbloquear'}" aria-label="${u.ativo ? 'Bloquear' : 'Desbloquear'} ${esc(u.nome)}">${ic(u.ativo ? 'cadeado' : 'destravar')}</button>
+          <button type="button" class="btn fantasma icone peq apagar" data-usr="excluir" data-uid="${u.id}" title="Excluir" aria-label="Excluir ${esc(u.nome)}">${ic('lixo')}</button>
+        </td></tr>`).join('');
+
+    const det = (s) => [s.detalhes.nome, s.detalhes.email, s.detalhes.papel && E.PAPEL[s.detalhes.papel]?.nome, s.detalhes.centro].filter(Boolean).map(esc).join(' · ');
+    raiz.innerHTML = `
+      ${solicitacoes.length ? `<div class="aviso-box cuidado">${ic('mensagem')}<div><b>${solicitacoes.length} ${solicitacoes.length === 1 ? 'solicitação aberta' : 'solicitações abertas'} de empresas.</b>
+        <ul class="lista-atencao">${solicitacoes.map((s) => `<li><b>${esc(s.empresa)}</b> · ${esc(s.tipoNome)}${det(s) ? ` · ${det(s)}` : ''}${s.detalhes.mensagem ? ` · “${esc(s.detalhes.mensagem)}”` : ''}
+          <small class="suave"> · ${esc(s.autor || '')}, ${esc(dataHora(s.criadoEm))}</small>
+          <span class="acoes-atencao"><button type="button" class="btn sec peq" data-emp-abrir="${s.empresaId}">Abrir empresa</button>
+          <button type="button" class="btn sec peq" data-sol-resolver="${s.id}">${ic('check')} Resolvida</button></span></li>`).join('')}</ul></div></div>` : ''}
+      <div class="cards dash-cards" style="--n:4">
+        <div class="kpi destaque dash-kpi"><span class="rot">Empresas clientes</span><div class="val">${empresas.length}</div><div class="det">${ativas.length} ${ativas.length === 1 ? 'ativa' : 'ativas'}${empresas.length - ativas.length ? ` · ${empresas.length - ativas.length} bloqueada(s)` : ''}</div></div>
+        <div class="kpi dash-kpi"><span class="rot">Usuários de empresas</span><div class="val">${totUsuarios}</div><div class="det">em ${empresas.length} ${empresas.length === 1 ? 'empresa' : 'empresas'}</div></div>
+        <div class="kpi verde dash-kpi"><span class="rot">Receita mensal Empresas</span><div class="val">${moeda(receita)}</div><div class="det">equivalente mensal das ativas</div></div>
+        <div class="kpi ${atencao.length + solicitacoes.length ? 'vermelho' : ''} dash-kpi"><span class="rot">Atenção</span><div class="val">${atencao.length + solicitacoes.length}</div><div class="det">${atencao.length} vencendo ou vencida(s) · ${solicitacoes.length} pedido(s)</div></div>
+      </div>
+      <div class="cartao">
+        <div class="cartao-cab"><div><h2><span class="bolha"><i data-ic="maleta"></i></span> Empresas</h2><p>Cada empresa tem plano, assinatura e usuários. Só a AR cria e altera.</p></div>
+          <button type="button" class="btn" data-emp-nova>${ic('mais')} Nova empresa</button></div>
+        ${empresas.length ? `<div class="tabela-wrap"><table class="t simples tab-empresas"><thead><tr><th>Empresa</th><th>Plano</th><th>Usuários</th><th>Assinatura</th><th>Situação</th><th></th></tr></thead><tbody>${linhas}</tbody></table></div>`
+          : '<p class="suave">Nenhuma empresa ainda. Crie a primeira em “Nova empresa”.</p>'}
+      </div>
+      ${e ? `<div class="cartao emp-detalhe">
+        <div class="cartao-cab"><div><h2><span class="bolha ciano"><i data-ic="usuarios"></i></span> ${esc(e.nome)} · usuários</h2>
+          <p>Plano ${esc(N.PLANO_ASSINATURA[e.plano].nome)} · ${e.usuariosPagos} de ${e.limiteUsuarios} usuários · <b>papéis e acessos definidos só por você</b></p></div>
+          <div class="linha">
+            <button type="button" class="btn sec" data-emp-acao="editar">${ic('editar')} Empresa e plano</button>
+            <button type="button" class="btn sec" data-emp-acao="renovar">${ic('repetir')} Renovou</button>
+            ${e.assinaturaVence ? `<button type="button" class="btn sec" data-emp-acao="aviso">${ic('mensagem')} Aviso</button>` : ''}
+            <button type="button" class="btn sec" data-emp-acao="${e.ativo ? 'bloquear' : 'desbloquear'}">${ic(e.ativo ? 'cadeado' : 'destravar')} ${e.ativo ? 'Bloquear empresa' : 'Desbloquear empresa'}</button>
+            <button type="button" class="btn" data-emp-acao="usuario">${ic('mais')} Novo usuário</button>
+          </div></div>
+        ${usuariosEmpresa.length ? `<div class="tabela-wrap"><table class="t simples"><thead><tr><th>Usuário</th><th>Papel</th><th>Centros de custo</th><th>Situação</th><th class="esconder-cel">Último acesso</th><th></th></tr></thead><tbody>${usuariosHtml}</tbody></table></div>`
+          : '<p class="suave">Nenhum usuário ainda. Comece pelo Dono da empresa.</p>'}
+        <div class="aviso-box info" style="margin:1em 0 0">${ic('escudo')}<div>Toda criação, troca de papel, bloqueio, redefinição de senha e exclusão fica registrada na <b>atividade recente</b>. Bloquear a empresa tira o acesso de todos os usuários dela de uma vez. Usuários de leitura não contam no limite do plano.</div></div>
+        <div class="linha fim" style="margin-top:.8em"><button type="button" class="btn fantasma peq apagar" data-emp-acao="excluir">${ic('lixo')} Excluir empresa</button></div>
+      </div>` : ''}`;
+    hidratar(raiz);
+  }
+
+  function formEmpresa(e = null) {
+    const { modal, fechar } = abrirModal(`
+      <form class="modal" role="dialog" aria-modal="true" aria-labelledby="t-emp" novalidate autocomplete="off">
+        <div class="cab-modal"><h2 id="t-emp">${e ? 'Empresa e plano' : 'Nova empresa'}</h2><button type="button" class="btn fantasma icone" data-fechar aria-label="Fechar"><i data-ic="x"></i></button></div>
+        <div class="grade-form">
+          <div class="inteiro"><label class="rotulo" for="e-nome">Razão social ou nome</label><input type="text" id="e-nome" maxlength="120" value="${esc(e?.nome || '')}" required></div>
+          <div><label class="rotulo" for="e-cnpj">CNPJ <small>(opcional)</small></label><input type="text" id="e-cnpj" inputmode="numeric" maxlength="18" placeholder="00.000.000/0000-00" value="${esc(cnpjBR(e?.cnpj))}"></div>
+          <div><label class="rotulo" for="e-tel">WhatsApp da empresa <small>(opcional)</small></label><input type="text" id="e-tel" inputmode="tel" maxlength="20" placeholder="(11) 98765-4321" value="${esc(formatarTelefone(e?.telefone))}"></div>
+          <fieldset class="inteiro periodos planos-emp"><legend class="rotulo">Plano</legend>
+            ${N.PLANOS_ASSINATURA.filter((p) => p.empresa).map((p) => `<label class="periodo"><input type="radio" name="e-plano" value="${p.id}" ${(e?.plano || 'essencial') === p.id ? 'checked' : ''}>
+              <b>${esc(p.nome)}</b><span class="v">${moeda(configAssin.precos[p.id].mensal)}<small style="display:inline"> /mês</small></span><small>${esc(p.det)}</small></label>`).join('')}
+          </fieldset>
+          ${e ? `<div><label class="rotulo" for="e-venc">Assinatura vence em</label><input type="date" id="e-venc" value="${esc(e.assinaturaVence || '')}"></div>` : ''}
+          <p class="inteiro dica" style="margin:0">${e ? 'Para mudar o período pago, use “Renovou”.' : 'A empresa já começa com um plano de contas padrão e três centros de custo, que o Dono e o Financeiro podem ajustar. A assinatura de 30 dias começa no primeiro acesso de qualquer usuário dela.'}</p>
+        </div>
+        <p class="erro-campo" id="e-erro" role="alert"></p>
+        <div class="rodape-modal"><button type="button" class="btn sec" data-fechar>Cancelar</button><button class="btn">${ic('check')} ${e ? 'Salvar' : 'Criar empresa'}</button></div>
+      </form>`);
+    modal.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const corpo = { nome: $('#e-nome', modal).value.trim(), cnpj: $('#e-cnpj', modal).value, telefone: $('#e-tel', modal).value.trim(), plano: $('input[name=e-plano]:checked', modal).value };
+      if (e) corpo.assinaturaVence = $('#e-venc', modal).value || null;
+      try {
+        if (e) await api('PUT', `/api/admin/empresas/${e.id}`, corpo);
+        else est.empresaSel = (await api('POST', '/api/admin/empresas', corpo)).id;
+        fechar(); toast(e ? 'Empresa atualizada.' : 'Empresa criada. Agora cadastre o Dono.'); renderEmpresas();
+      } catch (er) { $('#e-erro', modal).textContent = er.message; }
+    });
+  }
+
+  function formUsuarioEmpresa(e, u = null) {
+    const papelAtual = u?.papel || (usuariosEmpresa.some((x) => x.papel === 'dono') ? 'financeiro' : 'dono');
+    const centrosAtivos = e.centros.filter((c) => c.ativo || u?.centros.includes(c.id));
+    const { modal, fechar } = abrirModal(`
+      <form class="modal" role="dialog" aria-modal="true" aria-labelledby="t-ue" novalidate autocomplete="off">
+        <div class="cab-modal"><h2 id="t-ue">${u ? 'Editar usuário' : 'Novo usuário'} · ${esc(e.nome)}</h2><button type="button" class="btn fantasma icone" data-fechar aria-label="Fechar"><i data-ic="x"></i></button></div>
+        <div class="grade-form">
+          <div class="inteiro"><label class="rotulo" for="ue-nome">Nome</label><input type="text" id="ue-nome" maxlength="120" value="${esc(u?.nome || '')}" required></div>
+          <div><label class="rotulo" for="ue-login">Login <small>(pode ser o e-mail)</small></label><input type="text" id="ue-login" maxlength="80" autocapitalize="none" spellcheck="false" value="${esc(u?.login || '')}" ${u ? 'disabled' : 'required'}></div>
+          <div><label class="rotulo" for="ue-tel">Telefone <small>(opcional)</small></label><input type="text" id="ue-tel" inputmode="tel" maxlength="20" value="${esc(formatarTelefone(u?.telefone))}"></div>
+          <fieldset class="inteiro papeis-sel"><legend class="rotulo">Papel</legend>
+            ${E.PAPEIS.map((p) => `<label class="papel-op"><input type="radio" name="ue-papel" value="${p.id}" ${p.id === papelAtual ? 'checked' : ''}><span><b>${esc(p.nome)}</b><small>${esc(p.desc)}</small></span></label>`).join('')}
+          </fieldset>
+          <fieldset class="inteiro" id="ue-centros-campo"><legend class="rotulo">Centros de custo do gestor</legend>
+            ${centrosAtivos.length ? `<div class="pilulas multi">${centrosAtivos.map((c) => `<label><input type="checkbox" value="${esc(c.id)}" ${u?.centros.includes(c.id) ? 'checked' : ''}><span>${esc(c.nome)}</span></label>`).join('')}</div>` : '<p class="suave">A empresa ainda não tem centros de custo ativos.</p>'}
+          </fieldset>
+        </div>
+        <p class="dica">Plano ${esc(N.PLANO_ASSINATURA[e.plano].nome)}: ${e.usuariosPagos} de ${e.limiteUsuarios} usuários pagos em uso.</p>
+        <p class="erro-campo" id="ue-erro" role="alert"></p>
+        <div class="rodape-modal"><button type="button" class="btn sec" data-fechar>Cancelar</button><button class="btn">${ic('check')} ${u ? 'Salvar' : 'Criar usuário'}</button></div>
+      </form>`);
+    const papel = () => $('input[name=ue-papel]:checked', modal).value;
+    const mostrar = () => { $('#ue-centros-campo', modal).hidden = papel() !== 'gestor'; };
+    mostrar();
+    modal.addEventListener('change', (ev) => { if (ev.target.name === 'ue-papel') mostrar(); });
+    modal.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const corpo = { nome: $('#ue-nome', modal).value.trim(), telefone: $('#ue-tel', modal).value.trim(), papel: papel(),
+        centros: $$('#ue-centros-campo input:checked', modal).map((i) => i.value) };
+      try {
+        if (u) { await api('PUT', `/api/admin/usuarios/${u.id}`, corpo); fechar(); toast('Usuário atualizado.'); renderEmpresas(); }
+        else {
+          const r = await api('POST', '/api/admin/usuarios', { ...corpo, login: $('#ue-login', modal).value.trim(), empresaId: e.id });
+          fechar(); renderEmpresas();
+          mostrarSenha('Usuário criado', { nome: corpo.nome, login: r.login }, r.senhaTemporaria);
+        }
+      } catch (er) { $('#ue-erro', modal).textContent = er.message; }
+    });
+  }
+
+  async function acaoEmpresa(acao) {
+    const e = empSel();
+    if (!e) return;
+    try {
+      if (acao === 'editar') return formEmpresa(e);
+      if (acao === 'usuario') return formUsuarioEmpresa(e);
+      if (acao === 'renovar') {
+        return renovarAssinatura({ ...e, plano: e.plano }, { url: `/api/admin/empresas/${e.id}/renovar`, depois: renderEmpresas, tipo: 'empresa' });
+      }
+      if (acao === 'aviso') {
+        const dono = usuariosEmpresa.find((u) => u.papel === 'dono' && u.ativo);
+        return enviarAviso({ ...e, nome: dono?.nome || e.nome, telefone: e.telefone || dono?.telefone || '', login: dono?.login || '' }, `${e.nome}`);
+      }
+      if (acao === 'bloquear' || acao === 'desbloquear') {
+        const bloquear = acao === 'bloquear';
+        const ok = await confirmar({ titulo: bloquear ? 'Bloquear a empresa?' : 'Desbloquear a empresa?', perigo: bloquear, botao: bloquear ? 'Bloquear todos' : 'Desbloquear',
+          texto: bloquear ? `Os <b>${e.usuarios} usuários</b> de <b>${esc(e.nome)}</b> saem na hora e não conseguem entrar. Os dados ficam guardados.` : `Os usuários ativos de <b>${esc(e.nome)}</b> voltam a entrar.` });
+        if (!ok) return;
+        await api('PUT', `/api/admin/empresas/${e.id}`, { ativo: !bloquear });
+        toast(bloquear ? 'Empresa bloqueada.' : 'Empresa desbloqueada.');
+        return renderEmpresas();
+      }
+      if (acao === 'excluir') {
+        const ok = await confirmar({ titulo: 'Excluir empresa?', perigo: true, botao: 'Excluir definitivamente', palavra: e.nome,
+          texto: `A empresa <b>${esc(e.nome)}</b>, os <b>${e.usuarios} usuários</b> dela e <b>todos os lançamentos, orçamentos e cadastros</b> serão apagados. Isso não pode ser desfeito. Para só impedir o acesso, use “Bloquear empresa”.` });
+        if (!ok) return;
+        await api('DELETE', `/api/admin/empresas/${e.id}`, { confirmacao: e.nome });
+        est.empresaSel = null;
+        toast('Empresa excluída.');
+        return renderEmpresas();
+      }
+    } catch (er) { toast(er.message, { erro: true }); }
+  }
+
+  function ligarAdminEmpresas() {
+    $('#adm-empresas').addEventListener('click', async (ev) => {
+      const ab = ev.target.closest('[data-emp-abrir]');
+      if (ab) { est.empresaSel = Number(ab.dataset.empAbrir); await renderEmpresas(); $('.emp-detalhe')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+      if (ev.target.closest('[data-emp-nova]')) return formEmpresa();
+      const a = ev.target.closest('[data-emp-acao]');
+      if (a) return acaoEmpresa(a.dataset.empAcao);
+      const s = ev.target.closest('[data-sol-resolver]');
+      if (s) {
+        try { await api('PUT', `/api/admin/solicitacoes/${s.dataset.solResolver}`, { status: 'resolvida' }); toast('Solicitação marcada como resolvida.'); renderEmpresas(); }
+        catch (er) { toast(er.message, { erro: true }); }
+        return;
+      }
+      const tr = ev.target.closest('tr[data-emp]');
+      if (tr && !ev.target.closest('button')) { est.empresaSel = Number(tr.dataset.emp); renderEmpresas(); }
+    });
   }
 
   // ---------- eventos ----------
@@ -2212,9 +2439,12 @@
     ligarSimulador();
     if (eu.perfil === 'admin') {
       ligarConfigAssinaturas();
+      ligarAdminEmpresas();
       api('GET', '/api/admin/usuarios').then(seloAssinaturas).catch(() => {});
+      Promise.all([api('GET', '/api/admin/empresas'), api('GET', '/api/admin/solicitacoes')]).then(([e, s]) => { empresas = e; solicitacoes = s; seloEmpresas(); }).catch(() => {});
     }
     $('#link-admin').hidden = eu.perfil !== 'admin';
+    $('#link-empresas').hidden = eu.perfil !== 'admin';
     $('#grupo-admin').hidden = eu.perfil !== 'admin';
     marcarSinc('ok');
     lerHash();
