@@ -80,7 +80,7 @@
   // ---------- servidor ----------
   let eu = null;                     // usuário logado
   let modoEmpresa = false;           // usuário de empresa: a tela é do Vértice Empresas (empresa.js)
-  let dados = { lancamentos: [], planos: [], provisoes: [], cenarios: [] };   // lançamentos, planejamentos, provisões e cenários do simulador
+  let dados = { lancamentos: [], planos: [], provisoes: [], cenarios: [], tiposGasto: [] };   // lançamentos, planejamentos, provisões e cenários do simulador
   let rev = 0;                       // revisão dos dados no servidor
 
   async function api(metodo, url, corpo) {
@@ -113,11 +113,11 @@
       do {
         sinc.pendente = false;
         try {
-          rev = (await api('PUT', '/api/dados', { rev, lancamentos: dados.lancamentos, planos: dados.planos, provisoes: dados.provisoes, cenarios: dados.cenarios })).rev;
+          rev = (await api('PUT', '/api/dados', { rev, lancamentos: dados.lancamentos, planos: dados.planos, provisoes: dados.provisoes, cenarios: dados.cenarios, tiposGasto: dados.tiposGasto })).rev;
           marcarSinc('ok');
         } catch (e) {
           if (e.status === 409) {
-            rev = e.dados.rev; dados.lancamentos = e.dados.lancamentos; dados.planos = e.dados.planos || []; dados.provisoes = e.dados.provisoes || []; dados.cenarios = e.dados.cenarios || [];
+            rev = e.dados.rev; dados.lancamentos = e.dados.lancamentos; dados.planos = e.dados.planos || []; dados.provisoes = e.dados.provisoes || []; dados.cenarios = e.dados.cenarios || []; dados.tiposGasto = e.dados.tiposGasto || []; N.definirTiposProprios(dados.tiposGasto);
             sinc.pendente = false; marcarSinc('ok'); render();
             toast('Seus dados mudaram em outro dispositivo. Carreguei a versão mais recente; confira a última alteração.', { erro: true, tempo: 9000 });
           } else if (e.status >= 400 && e.status < 500) {
@@ -136,7 +136,7 @@
     if (modoEmpresa || sinc.ocupado || sinc.estado !== 'ok' || $('.fundo-modal') || document.activeElement?.closest('#planos')) return;
     try {
       const d = await api('GET', '/api/dados');
-      if (d.rev !== rev && !sinc.ocupado) { rev = d.rev; dados.lancamentos = d.lancamentos; dados.planos = d.planos || []; dados.provisoes = d.provisoes || []; dados.cenarios = d.cenarios || []; render(); }
+      if (d.rev !== rev && !sinc.ocupado) { rev = d.rev; dados.lancamentos = d.lancamentos; dados.planos = d.planos || []; dados.provisoes = d.provisoes || []; dados.cenarios = d.cenarios || []; dados.tiposGasto = d.tiposGasto || []; N.definirTiposProprios(dados.tiposGasto); render(); }
     } catch { /* tenta de novo na próxima vez */ }
   }
 
@@ -229,6 +229,52 @@
     });
   }
 
+  // ---------- tipos de gasto próprios ----------
+  /** Cria (ou reaproveita) um tipo de gasto com o nome digitado. Devolve o id. */
+  function criarTipo(nome) {
+    const r = N.novoTipoGasto(nome, dados.tiposGasto);
+    if (!r) return null;
+    if (r.novo) {
+      if (dados.tiposGasto.length >= N.MAX_TIPOS_PROPRIOS) { toast(`Limite de ${N.MAX_TIPOS_PROPRIOS} tipos próprios.`, { erro: true }); return null; }
+      dados.tiposGasto = [...dados.tiposGasto, r.tipo];
+      N.definirTiposProprios(dados.tiposGasto);
+      sincronizar();
+      toast(`Tipo “${r.tipo.nome}” criado.`);
+    }
+    return r.tipo.id;
+  }
+  /** Pergunta o nome de um tipo novo. Resolve o id criado ou null. */
+  function pedirNovoTipo() {
+    return new Promise((ok) => {
+      const { fundo, modal, fechar } = abrirModal(`<form class="modal" role="dialog" aria-modal="true" aria-labelledby="t-ntipo" novalidate>
+        <div class="cab-modal"><h2 id="t-ntipo">Novo tipo de gasto</h2><button type="button" class="btn fantasma icone" data-fechar aria-label="Fechar"><i data-ic="x"></i></button></div>
+        <label class="rotulo" for="ntipo-nome">Nome do tipo</label><input type="text" id="ntipo-nome" maxlength="30" placeholder="Ex.: Viagem de trabalho, Filhos, Beleza" autofocus>
+        <p class="dica">Fica disponível em todos os seus lançamentos. Você renomeia ou exclui em Minha conta.</p>
+        <div class="rodape-modal"><button type="button" class="btn sec" data-fechar>Cancelar</button><button class="btn">${ic('check')} Criar tipo</button></div></form>`, { estreito: true });
+      fundo.addEventListener('cancelado', () => ok(null));
+      modal.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const id = criarTipo($('#ntipo-nome', modal).value);
+        if (!id) return $('#ntipo-nome', modal).focus();
+        fechar(); ok(id);
+      });
+    });
+  }
+  const NOVO_TIPO = '__novo';
+  const opcoesTiposGasto = (sel, { novo = true } = {}) => `<option value="">Sem tipo</option>${N.todosTipos().map((t) => `<option value="${esc(t.id)}" ${t.id === sel ? 'selected' : ''}>${t.emoji} ${esc(t.nome)}</option>`).join('')}${
+    sel && !N.TIPO[sel] && N.infoTipo(sel) ? `<option value="${esc(sel)}" selected>🏷️ ${esc(N.infoTipo(sel).nome)}</option>` : ''}${novo ? `<option value="${NOVO_TIPO}">＋ Outro tipo…</option>` : ''}`;
+  /** Liga a opção "Outro tipo…" de um select: pergunta o nome e seleciona o tipo criado. */
+  async function tratarNovoTipo(select, aoEscolher) {
+    if (select.value !== NOVO_TIPO) return false;
+    const anterior = select.dataset.anterior || '';
+    const id = await pedirNovoTipo();
+    select.innerHTML = opcoesTiposGasto(id || anterior);
+    select.dataset.anterior = select.value;
+    if (id) aoEscolher?.(id);
+    select.focus();
+    return true;
+  }
+
   // ---------- formulário de lançamento ----------
   function abrirFormulario(existente = null) {
     const tpl = $('#tpl-lancamento').content.firstElementChild.cloneNode(true);
@@ -259,17 +305,44 @@
       cartaoSel.definir(b.dataset.cartao);
     });
     // Tipo de gasto: sugerido pela descrição até a pessoa escolher um.
-    f('f-tipos').innerHTML = `<label><input type="radio" name="tg" value=""><span>Sem tipo</span></label>${N.TIPOS_GASTO.map((t) => `<label><input type="radio" name="tg" value="${t.id}"><span>${t.emoji} ${esc(t.nome)}</span></label>`).join('')}`;
+    function desenharTipos(sel) {
+      const extra = sel && !N.TIPO[sel] && N.infoTipo(sel) ? [N.infoTipo(sel)] : [];
+      f('f-tipos').innerHTML = `<label><input type="radio" name="tg" value=""><span>Sem tipo</span></label>${[...N.todosTipos(), ...extra].map((t) => `<label><input type="radio" name="tg" value="${esc(t.id)}"><span>${t.emoji} ${esc(t.nome)}</span></label>`).join('')}
+        <button type="button" class="tipo-novo" data-tipo-novo>${ic('mais')} Outro tipo</button>
+        <span class="tipo-novo-campo" hidden><input type="text" maxlength="30" placeholder="Nome do tipo" aria-label="Nome do novo tipo de gasto"><button type="button" class="btn peq" data-tipo-criar>Adicionar</button></span>`;
+      marcarTipo(sel || '');
+    }
     let tipoManual = !!l.tipoGasto;
-    const marcarTipo = (id) => { const r = $(`input[name=tg][value="${id || ''}"]`, modal); if (r) r.checked = true; };
+    const marcarTipo = (id) => { const r = $(`input[name=tg][value="${CSS.escape(id || '')}"]`, modal); if (r) r.checked = true; };
+    desenharTipos(l.tipoGasto || '');
+    const criarNoFormulario = () => {
+      const campo = $('.tipo-novo-campo input', modal);
+      const id = criarTipo(campo.value);
+      if (!id) return campo.focus();
+      tipoManual = true; f('dica-tipo').textContent = '';
+      desenharTipos(id);
+      $(`input[name=tg][value="${CSS.escape(id)}"]`, modal)?.focus();
+    };
+    f('f-tipos').addEventListener('click', (e) => {
+      if (e.target.closest('[data-tipo-novo]')) {
+        e.target.closest('[data-tipo-novo]').hidden = true;
+        const c = $('.tipo-novo-campo', modal); c.hidden = false; $('input', c).focus();
+      }
+      if (e.target.closest('[data-tipo-criar]')) criarNoFormulario();
+    });
+    f('f-tipos').addEventListener('keydown', (e) => {
+      if (!e.target.closest('.tipo-novo-campo')) return;
+      if (e.key === 'Enter') { e.preventDefault(); criarNoFormulario(); }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); desenharTipos($('input[name=tg]:checked', modal)?.value || ''); }
+    });
     marcarTipo(l.tipoGasto || '');
     function sugerirTipo() {
       if (tipoManual) return;
       const sug = N.sugerirTipoGasto(f('f-desc').value, dados.lancamentos);
       marcarTipo(sug || '');
-      f('dica-tipo').textContent = sug ? `Sugerido pela descrição: ${N.TIPO[sug].nome}. Toque em outro para trocar.` : '';
+      f('dica-tipo').textContent = sug ? `Sugerido pela descrição: ${N.infoTipo(sug).nome}. Toque em outro para trocar.` : '';
     }
-    f('f-tipos').addEventListener('change', () => { tipoManual = true; f('dica-tipo').textContent = ''; });
+    f('f-tipos').addEventListener('change', (e) => { if (e.target.name === 'tg') { tipoManual = true; f('dica-tipo').textContent = ''; } });
     f('f-desc').addEventListener('input', sugerirTipo);
     function mostrarTipo() { f('bloco-tipo').hidden = CAT[$('input[name=cat]:checked', modal)?.value]?.tipo !== 'saida' || detalhando(); }
     const val = (nome) => $(`input[name=${nome}]:checked`, modal)?.value;
@@ -278,7 +351,7 @@
     let detalhar = compras.length > 0;
     let valorManual = !!existente && detalhar && l.centavos > N.somaCompras(l);
     let notaFixas = '';
-    const opcoesTipo = (sel) => `<option value="">Sem tipo</option>${N.TIPOS_GASTO.map((t) => `<option value="${t.id}" ${t.id === sel ? 'selected' : ''}>${t.emoji} ${esc(t.nome)}</option>`).join('')}`;
+    const opcoesTipo = (sel) => opcoesTiposGasto(sel);
     const somaCompras = () => compras.reduce((a, c) => a + (c.centavos > 0 ? c.centavos : 0), 0);
     const podeDetalhar = () => $('input[name=cat]:checked', modal)?.value === 'cartao' && (existente || val('rec') !== 'parcelada');
     const detalhando = () => detalhar && podeDetalhar();
@@ -332,7 +405,14 @@
       const tr = e.target.closest('tr[data-i]');
       if (!tr) return;
       const c = compras[+tr.dataset.i];
-      if (e.target.dataset.fc === 'tipo') { c.tipoGasto = e.target.value || null; c.tipoManual = true; }
+      if (e.target.dataset.fc === 'tipo') {
+        if (e.target.value === NOVO_TIPO) {
+          e.target.dataset.anterior = c.tipoGasto || '';
+          tratarNovoTipo(e.target, (id) => { c.tipoGasto = id; c.tipoManual = true; desenharCompras(); });
+          return;
+        }
+        c.tipoGasto = e.target.value || null; c.tipoManual = true;
+      }
       if (e.target.dataset.fc === 'fixa') c.fixa = e.target.checked;
       if (e.target.dataset.fc === 'valor' && c.centavos > 0) e.target.value = N.valorParaCampo(c.centavos);
     });
@@ -466,6 +546,7 @@
       const provisao = f('bloco-prov').hidden ? null : (f('f-prov').value || null);
       const cartao = f('bloco-cartao').hidden ? '' : cartaoSel.ler();
       const tipoGasto = f('bloco-tipo').hidden ? null : ($('input[name=tg]:checked', modal)?.value || null);
+      if ($('.tipo-novo-campo input', modal)?.value.trim() && !$('.tipo-novo-campo', modal).hidden) return toast('Toque em “Adicionar” para criar o tipo digitado, ou apague o nome.', { erro: true });
       if (!f('bloco-cartao').hidden && f('f-cartao').value === OUTRO && !cartao) {
         f('f-cartao-outro').focus();
         return toast('Digite o nome do banco ou escolha um da lista.', { erro: true });
@@ -678,7 +759,7 @@
       `<button type="button" data-filtro-cartao="${esc(k)}" class="${est.filtroCartao === k ? 'ativo' : ''}" aria-pressed="${est.filtroCartao === k}">${esc(c.nome)} <b>${moeda(c.total)}</b></button>`).join('')}` : '';
     if (est.filtroCartao && est.filtro !== 'atrasados') itens = itens.filter((l) => l.categoria === 'cartao' && N.normalizar(l.cartao || 'Sem cartão definido') === est.filtroCartao);
     const q = N.normalizar(est.busca.trim());
-    if (q) itens = itens.filter((l) => N.normalizar(`${l.desc} ${l.obs || ''} ${CAT[l.categoria].nome} ${l.cartao || ''} ${nomeProvisao(l.provisao) || ''} ${N.TIPO[l.tipoGasto]?.nome || ''} ${(l.compras || []).map((c) => `${c.desc} ${N.TIPO[c.tipoGasto]?.nome || ''}`).join(' ')}`).includes(q));
+    if (q) itens = itens.filter((l) => N.normalizar(`${l.desc} ${l.obs || ''} ${CAT[l.categoria].nome} ${l.cartao || ''} ${nomeProvisao(l.provisao) || ''} ${N.infoTipo(l.tipoGasto)?.nome || ''} ${(l.compras || []).map((c) => `${c.desc} ${N.infoTipo(c.tipoGasto)?.nome || ''}`).join(' ')}`).includes(q));
     // Na busca, faturas que casam por uma compra já aparecem abertas.
     if (q) for (const l of itens) if ((l.compras || []).some((c) => N.normalizar(c.desc).includes(q))) est.comprasAbertas.add(l.id);
     const ord = {
@@ -726,7 +807,7 @@
           aria-label="${l.pago ? 'Desmarcar' : 'Marcar como ' + c.feito.toLowerCase()}: ${esc(l.desc)}" title="${l.pago ? 'Desmarcar' : 'Marcar como ' + c.feito.toLowerCase()}">${ic('check')}</button>
         <div class="data" aria-hidden="true"><b>${d.getDate()}</b><small>${MESES_CURTOS[d.getMonth()]}${outroMes ? ' ' + String(d.getFullYear()).slice(2) : ''}</small></div>
         <div class="desc"><b title="${esc(N.titulo(l))}">${esc(l.desc)}</b>
-          <div class="tags"><span class="tag quando neutra">${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span><span class="tag cat" data-cat="${l.categoria}">${esc(nomeCategoria(l.categoria, l.cartao))}</span>${l.tipoGasto && N.TIPO[l.tipoGasto] ? `<span class="tag neutra">${esc(nomeTipo(l.tipoGasto))}</span>` : ''}${l.compras?.length ? `<button type="button" class="tag info tag-compras" data-acao="compras" data-id="${esc(l.id)}" aria-expanded="${est.comprasAbertas.has(l.id)}">🧾 ${l.compras.length} ${l.compras.length === 1 ? 'compra' : 'compras'} ${ic(est.comprasAbertas.has(l.id) ? 'desce2' : 'dir')}</button>` : ''}${serie}${l.provisao && nomeProvisao(l.provisao) ? `<span class="tag prov-tag" title="Provisão">${ic('alvo')} ${esc(nomeProvisao(l.provisao))}</span>` : ''}${situ}</div>${l.obs ? `<div class="obs"><button type="button" data-acao="obs" aria-expanded="false" title="${esc(l.obs)}">${ic('nota')}<span>${esc(l.obs)}</span></button></div>` : ''}</div>
+          <div class="tags"><span class="tag quando neutra">${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span><span class="tag cat" data-cat="${l.categoria}">${esc(nomeCategoria(l.categoria, l.cartao))}</span>${l.tipoGasto && N.infoTipo(l.tipoGasto) ? `<span class="tag neutra">${esc(nomeTipo(l.tipoGasto))}</span>` : ''}${l.compras?.length ? `<button type="button" class="tag info tag-compras" data-acao="compras" data-id="${esc(l.id)}" aria-expanded="${est.comprasAbertas.has(l.id)}">🧾 ${l.compras.length} ${l.compras.length === 1 ? 'compra' : 'compras'} ${ic(est.comprasAbertas.has(l.id) ? 'desce2' : 'dir')}</button>` : ''}${serie}${l.provisao && nomeProvisao(l.provisao) ? `<span class="tag prov-tag" title="Provisão">${ic('alvo')} ${esc(nomeProvisao(l.provisao))}</span>` : ''}${situ}</div>${l.obs ? `<div class="obs"><button type="button" data-acao="obs" aria-expanded="false" title="${esc(l.obs)}">${ic('nota')}<span>${esc(l.obs)}</span></button></div>` : ''}</div>
         <div class="valor">${c.tipo === 'entrada' ? '+ ' : ''}${moeda(l.centavos)}</div>
         <div class="acoes">
           <button type="button" class="btn fantasma icone peq" data-acao="editar" data-id="${esc(l.id)}" aria-label="Editar ${esc(l.desc)}" title="Editar">${ic('editar')}</button>
@@ -793,7 +874,7 @@
   function exportar() {
     const d = new Date();
     const carimbo = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    baixar(`vertice-backup-${carimbo}.json`, JSON.stringify({ versao: N.VERSAO_DADOS, lancamentos: dados.lancamentos, exportadoEm: d.toISOString() }, null, 2), 'application/json');
+    baixar(`vertice-backup-${carimbo}.json`, JSON.stringify({ versao: N.VERSAO_DADOS, lancamentos: dados.lancamentos, tiposGasto: dados.tiposGasto, exportadoEm: d.toISOString() }, null, 2), 'application/json');
     toast('Cópia dos dados baixada.');
   }
   async function importar(arquivo) {
@@ -819,6 +900,9 @@
     });
     if (!escolha) return;
     const antes = dados.lancamentos;
+    // Tipos próprios do arquivo que ainda não existem aqui entram junto.
+    const novosTipos = (lido.tiposGasto || []).filter((t) => !dados.tiposGasto.some((x) => x.id === t.id));
+    if (novosTipos.length) { dados.tiposGasto = [...dados.tiposGasto, ...novosTipos].slice(0, N.MAX_TIPOS_PROPRIOS); N.definirTiposProprios(dados.tiposGasto); }
     if (escolha === 'substituir') dados.lancamentos = lido.lancamentos;
     else {
       const ids = new Set(lido.lancamentos.map((l) => l.id));
@@ -833,6 +917,58 @@
     $('#perfil-login').textContent = eu.login;
     const n = dados.lancamentos.length;
     $('#info-backup').textContent = `${n} ${n === 1 ? 'lançamento salvo' : 'lançamentos salvos'} na sua conta. Baixe uma cópia quando quiser guardar ou levar para uma planilha.`;
+    renderTiposProprios();
+  }
+
+  function usoTipo(id) {
+    return dados.lancamentos.reduce((a, l) => a + (l.tipoGasto === id ? 1 : 0) + (l.compras || []).filter((c) => c.tipoGasto === id).length, 0);
+  }
+  function renderTiposProprios() {
+    const lista = dados.tiposGasto;
+    $('#tipos-proprios').innerHTML = `${lista.length ? `<ul class="cad-lista">${lista.map((t) => `<li><span class="tipo-emoji" aria-hidden="true">${t.emoji}</span>
+        <input type="text" maxlength="30" value="${esc(t.nome)}" data-tp-nome="${esc(t.id)}" aria-label="Nome do tipo ${esc(t.nome)}">
+        <small class="suave">${usoTipo(t.id)} uso(s)</small>
+        <button type="button" class="btn fantasma icone peq apagar" data-tp-excluir="${esc(t.id)}" title="Excluir" aria-label="Excluir o tipo ${esc(t.nome)}">${ic('lixo')}</button></li>`).join('')}</ul>`
+      : '<p class="suave" style="margin-top:0">Você ainda não criou tipos. Os 12 tipos padrão continuam disponíveis.</p>'}
+      <form class="linha" id="form-tipo-novo" autocomplete="off"><input type="text" id="tp-novo" maxlength="30" placeholder="Novo tipo, ex.: Viagem de trabalho" style="flex:1 1 200px" aria-label="Nome do novo tipo">
+        <button class="btn sec">${ic('mais')} Criar tipo</button></form>`;
+  }
+  function ligarTiposProprios() {
+    const raiz = $('#tipos-proprios');
+    raiz.addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (criarTipo($('#tp-novo').value)) { renderTiposProprios(); $('#tp-novo').focus(); }
+    });
+    raiz.addEventListener('change', (e) => {
+      const i = e.target.closest('[data-tp-nome]');
+      if (!i) return;
+      const nome = i.value.replace(/\s+/g, ' ').trim().slice(0, 30);
+      const t = dados.tiposGasto.find((x) => x.id === i.dataset.tpNome);
+      if (!nome) { i.value = t.nome; return toast('O tipo precisa de um nome.', { erro: true }); }
+      dados.tiposGasto = dados.tiposGasto.map((x) => (x.id === t.id ? { ...x, nome } : x));
+      N.definirTiposProprios(dados.tiposGasto);
+      sincronizar(); toast('Tipo renomeado.');
+    });
+    raiz.addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-tp-excluir]');
+      if (!b) return;
+      const t = dados.tiposGasto.find((x) => x.id === b.dataset.tpExcluir);
+      const n = usoTipo(t.id);
+      if (n && !(await confirmar({ titulo: `Excluir “${t.nome}”?`, perigo: true, botao: 'Excluir tipo',
+        texto: `${n} ${n === 1 ? 'gasto usa' : 'gastos usam'} este tipo e ${n === 1 ? 'ficará' : 'ficarão'} <b>sem tipo</b>. Os valores não mudam.` }))) return;
+      const antes = { tipos: dados.tiposGasto, lancamentos: dados.lancamentos };
+      dados.tiposGasto = dados.tiposGasto.filter((x) => x.id !== t.id);
+      dados.lancamentos = dados.lancamentos.map((l) => {
+        const usa = l.tipoGasto === t.id || (l.compras || []).some((c) => c.tipoGasto === t.id);
+        if (!usa) return l;
+        const novo = { ...l, tipoGasto: l.tipoGasto === t.id ? null : l.tipoGasto };
+        if (l.compras) novo.compras = l.compras.map((c) => (c.tipoGasto === t.id ? { ...c, tipoGasto: null } : c));
+        return novo;
+      });
+      N.definirTiposProprios(dados.tiposGasto);
+      salvar();
+      toast(`Tipo “${t.nome}” excluído.`, { acao: () => { dados.tiposGasto = antes.tipos; dados.lancamentos = antes.lancamentos; N.definirTiposProprios(dados.tiposGasto); salvar(); } });
+    });
   }
 
   function htmlComprasFatura(l) {
@@ -843,7 +979,7 @@
   }
 
   // ---------- onde estou gastando ----------
-  const nomeTipo = (id) => (N.TIPO[id] ? `${N.TIPO[id].emoji} ${N.TIPO[id].nome}` : '');
+  const nomeTipo = (id) => { const t = N.infoTipo(id); return t ? `${t.emoji} ${t.nome}` : ''; };
   function htmlGastos(mes, filtroCats) {
     const g = N.gastos(dados.lancamentos, est.ano, mes, { categorias: filtroCats });
     if (!g.qtd) return `<div class="cartao"><div class="vazio">${ILUSTRA}<h3>Nenhuma despesa neste período</h3><p>Lance despesas ou gastos no cartão e escolha o tipo de gasto (Alimentação, Mercado, Transporte…) para ver aqui onde o dinheiro está indo.</p></div></div>`;
@@ -890,7 +1026,7 @@
         return `<tr><th scope="row">${esc(c.nome)}</th>${tiposCartao.map((t) => `<td class="num">${c.porTipo[t.id] ? moeda(c.porTipo[t.id]) : '–'}</td>`).join('')}<td class="num">${c.total - principais ? moeda(c.total - principais) : '–'}</td><td class="num"><b>${moeda(c.total)}</b></td></tr>`;
       }).join('')}</tbody></table>` : '<p class="suave">Nenhum gasto no cartão neste período.</p>';
 
-    const maiores = `<ol class="estabs">${g.maioresDescricoes.map((d) => `<li><span>${esc(d.desc)}${d.tipoGasto ? ` <small>· ${esc(N.TIPO[d.tipoGasto].nome)}</small>` : ''}</span><small>${d.qtd}×</small><b>${moeda(d.total)}</b></li>`).join('')}</ol>`;
+    const maiores = `<ol class="estabs">${g.maioresDescricoes.map((d) => `<li><span>${esc(d.desc)}${d.tipoGasto ? ` <small>· ${esc(N.infoTipo(d.tipoGasto).nome)}</small>` : ''}</span><small>${d.qtd}×</small><b>${moeda(d.total)}</b></li>`).join('')}</ol>`;
 
     return `<div class="cards dash-cards" style="--n:3;grid-template-columns:repeat(3,1fr)">${tiles.join('')}</div>
       <div class="dash-grade">
@@ -911,7 +1047,7 @@
     const ids = new Set(N.gastos(dados.lancamentos, est.ano, mes, { categorias: filtroCats }).semTipo.ids);
     const itens = dados.lancamentos.filter((l) => ids.has(l.id)).sort((a, b) => N.dataDe(a) - N.dataDe(b));
     if (!itens.length) return;
-    const opcoes = (sel) => `<option value="">Sem tipo</option>${N.TIPOS_GASTO.map((t) => `<option value="${t.id}" ${sel === t.id ? 'selected' : ''}>${t.emoji} ${esc(t.nome)}</option>`).join('')}`;
+    const opcoes = (sel) => opcoesTiposGasto(sel);
     const { modal, fechar } = abrirModal(`
       <form class="modal largo" role="dialog" aria-modal="true" aria-labelledby="t-class" novalidate>
         <div class="cab-modal"><h2 id="t-class">Classificar gastos sem tipo</h2><button type="button" class="btn fantasma icone" data-fechar aria-label="Fechar"><i data-ic="x"></i></button></div>
@@ -922,9 +1058,15 @@
         </tbody></table></div>
         <div class="rodape-modal"><button type="button" class="btn sec" data-fechar>Cancelar</button><button class="btn">${ic('check')} Salvar classificação</button></div>
       </form>`);
+    $$('[data-classif]', modal).forEach((s) => { s.dataset.anterior = s.value; });
+    modal.addEventListener('change', (e) => {
+      const s = e.target.closest('[data-classif]');
+      if (s && !s.value.startsWith('__')) s.dataset.anterior = s.value;
+      if (s) tratarNovoTipo(s);
+    });
     modal.addEventListener('submit', (e) => {
       e.preventDefault();
-      const escolhas = new Map($$('[data-classif]', modal).filter((s) => s.value).map((s) => [s.dataset.classif, s.value]));
+      const escolhas = new Map($$('[data-classif]', modal).filter((s) => s.value && s.value !== NOVO_TIPO).map((s) => [s.dataset.classif, s.value]));
       if (!escolhas.size) return toast('Escolha o tipo de pelo menos um lançamento.', { erro: true });
       const antes = dados.lancamentos;
       dados.lancamentos = dados.lancamentos.map((l) => (escolhas.has(l.id) ? { ...l, tipoGasto: escolhas.get(l.id) } : l));
@@ -2558,6 +2700,7 @@
     try {
       const [usuario, d] = await Promise.all([api('GET', '/api/eu'), api('GET', '/api/dados')]);
       eu = usuario; rev = d.rev; dados.lancamentos = d.lancamentos; dados.planos = d.planos || []; dados.provisoes = d.provisoes || []; dados.cenarios = d.cenarios || [];
+      dados.tiposGasto = d.tiposGasto || []; N.definirTiposProprios(dados.tiposGasto);
     } catch (e) {
       $('#carregando').innerHTML = `<div>${ic('alerta')}<h3>Não foi possível carregar seus dados</h3><p>${esc(e.message)}</p>
         <button type="button" class="btn" id="tentar">Tentar de novo</button></div>`;
@@ -2576,6 +2719,7 @@
     }
     ligarPlanos();
     ligarSimulador();
+    ligarTiposProprios();
     if (eu.perfil === 'admin') {
       ligarConfigAssinaturas();
       ligarAdminEmpresas();

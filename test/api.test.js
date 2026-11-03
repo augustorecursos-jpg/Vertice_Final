@@ -145,6 +145,18 @@ test('cenários do simulador são salvos, validados e mantidos quando omitidos',
   db.prepare('UPDATE carteiras SET rev = 1 WHERE usuario_id = ?').run(idAna);
 });
 
+test('tipos de gasto próprios são salvos com a carteira e validados', async () => {
+  const { db } = require('../db');
+  const revAtual = () => db.prepare('SELECT rev FROM carteiras WHERE usuario_id = ?').get(idAna).rev;
+  const tipos = [{ id: 'u:viagem-de-trabalho', nome: 'Viagem de trabalho' }, { id: 'ruim', nome: 'X' }];
+  assert.equal((await ana('PUT', '/api/dados', { rev: revAtual(), lancamentos: [lanc('a1'), lanc('a2')], tiposGasto: tipos })).status, 200);
+  assert.deepEqual((await ana('GET', '/api/dados')).dados.tiposGasto.map((t) => t.id), ['u:viagem-de-trabalho']);
+  await ana('PUT', '/api/dados', { rev: revAtual(), lancamentos: [lanc('a1'), lanc('a2')] });
+  assert.equal((await ana('GET', '/api/dados')).dados.tiposGasto.length, 1);
+  assert.equal((await ana('PUT', '/api/dados', { rev: revAtual(), lancamentos: [], tiposGasto: 'x' })).status, 400);
+  db.prepare('UPDATE carteiras SET rev = 1 WHERE usuario_id = ?').run(idAna);
+});
+
 test('dados no formato antigo (só a lista) continuam legíveis', async () => {
   const { db } = require('../db');
   const antes = db.prepare('SELECT dados FROM carteiras WHERE usuario_id = ?').get(idAna).dados;

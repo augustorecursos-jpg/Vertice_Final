@@ -782,6 +782,15 @@ table.ovr tbody th { min-width: 180px; }
   body { background: #fff; }
 }
 
+/* ---------- tipos de gasto próprios ---------- */
+.tipo-novo { font: inherit; display: inline-flex; align-items: center; gap: .3em; border: 1px dashed var(--borda-forte); background: transparent; border-radius: 99px; padding: .4em .9em; font-size: .85rem; font-weight: 700; color: var(--marinho-800); cursor: pointer; }
+.tipo-novo:hover { background: var(--claro-50); }
+.tipo-novo svg.ic { width: 1em; height: 1em; }
+.pilulas .tipo-novo-campo { display: inline-flex; gap: .4em; align-items: center; border: 0; padding: 0; background: none; }
+.tipo-novo-campo[hidden] { display: none !important; }
+.pilulas .tipo-novo-campo input { position: static; opacity: 1; inset: auto; cursor: text; padding: .38em .7em; font-size: .85rem; width: 13em; border-radius: 99px; }
+.tipo-emoji { width: 1.4em; text-align: center; }
+
 /* ---------- compras da fatura do cartão ---------- */
 .fat-tog { display: flex; align-items: center; justify-content: space-between; gap: 1em; background: var(--claro-50); border: 1px solid var(--borda); border-radius: 14px; padding: .7em .9em; cursor: pointer; }
 .fat-tog b { color: var(--marinho-900); display: block; }

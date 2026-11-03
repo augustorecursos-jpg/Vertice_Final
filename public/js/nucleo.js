@@ -32,6 +32,50 @@
     { id: 'pets', nome: 'Pets', emoji: '🐾' }, { id: 'outros', nome: 'Outros', emoji: '❔' },
   ];
   const TIPO = Object.fromEntries(TIPOS_GASTO.map((t) => [t.id, t]));
+
+  // Tipos criados pela pessoa ("u:viagem-de-trabalho"). Ficam na carteira dela; no navegador entram em TIPO.
+  const TIPO_PROPRIO = /^u:[a-z0-9-]{1,40}$/;
+  const MAX_TIPOS_PROPRIOS = 60;
+  const tipoValido = (v) => !!TIPO[v] || (typeof v === 'string' && TIPO_PROPRIO.test(v));
+  const proprios = [];
+  const slugTipo = (nome) => normalizarTexto(nome).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+  /** Nome e emoji de um tipo; um tipo próprio que sumiu da lista ainda ganha um nome legível. */
+  function infoTipo(id) {
+    if (TIPO[id]) return TIPO[id];
+    if (typeof id !== 'string' || !TIPO_PROPRIO.test(id)) return null;
+    const nome = id.slice(2).replace(/-/g, ' ');
+    return { id, nome: nome.charAt(0).toUpperCase() + nome.slice(1), emoji: '🏷️', proprio: true };
+  }
+  function limparTiposGasto(x) {
+    if (!Array.isArray(x)) return [];
+    const vistos = new Set(), out = [];
+    for (const t of x.slice(0, MAX_TIPOS_PROPRIOS)) {
+      const nome = String(t?.nome ?? '').replace(/\s+/g, ' ').trim().slice(0, 30);
+      const id = String(t?.id || '');
+      if (!nome || !TIPO_PROPRIO.test(id) || vistos.has(id)) continue;
+      vistos.add(id);
+      out.push({ id, nome, emoji: '🏷️', proprio: true });
+    }
+    return out;
+  }
+  /** Registra os tipos próprios da pessoa (só no navegador: o servidor só valida o formato). */
+  function definirTiposProprios(lista) {
+    for (const t of proprios) delete TIPO[t.id];
+    proprios.splice(0, proprios.length, ...limparTiposGasto(lista).filter((t) => !TIPOS_GASTO.some((b) => b.id === t.id)));
+    for (const t of proprios) TIPO[t.id] = t;
+  }
+  const todosTipos = () => [...TIPOS_GASTO, ...proprios];
+  /** Tipo para um nome digitado: reaproveita um existente com o mesmo nome ou cria um próprio. */
+  function novoTipoGasto(nome, existentes = proprios) {
+    const limpo = String(nome ?? '').replace(/\s+/g, ' ').trim().slice(0, 30);
+    const slug = slugTipo(limpo);
+    if (!slug) return null;
+    const igual = [...TIPOS_GASTO, ...existentes].find((t) => slugTipo(t.nome) === slug);
+    if (igual) return { tipo: igual, novo: false };
+    let id = `u:${slug}`, n = 2;
+    while (existentes.some((t) => t.id === id)) id = `u:${slug.slice(0, 36)}-${n++}`;
+    return { tipo: { id, nome: limpo, emoji: '🏷️', proprio: true }, novo: true };
+  }
   // Palavras que sugerem o tipo pela descrição (a escolha da pessoa sempre vence).
   const PALAVRAS_TIPO = [
     // Expressões específicas primeiro, para não caírem num tipo mais genérico.
@@ -59,7 +103,7 @@
       const centavos = Number(c?.centavos);
       const desc = String(c?.desc ?? '').replace(/\s+/g, ' ').trim().slice(0, 80);
       if (!desc || !Number.isInteger(centavos) || centavos <= 0 || centavos > 1e13) return null;
-      return { id: String(c.id || novoId()).slice(0, 80), desc, centavos, tipoGasto: TIPO[c.tipoGasto] ? c.tipoGasto : null, fixa: !!c.fixa };
+      return { id: String(c.id || novoId()).slice(0, 80), desc, centavos, tipoGasto: tipoValido(c.tipoGasto) ? c.tipoGasto : null, fixa: !!c.fixa };
     }).filter(Boolean);
   }
   const somaCompras = (l) => (l.compras || []).reduce((a, c) => a + c.centavos, 0);
@@ -120,7 +164,7 @@
     return null;
   }
   /** Tipo de gasto só existe em despesas (fixa, variável e cartão). */
-  const limparTipoGasto = (categoria, v) => (CAT[categoria]?.tipo === 'saida' && TIPO[v] ? v : null);
+  const limparTipoGasto = (categoria, v) => (CAT[categoria]?.tipo === 'saida' && tipoValido(v) ? v : null);
 
   const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
   const MESES_CURTOS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
@@ -367,7 +411,7 @@
       porTipo.set(p.tipoGasto, t);
     }
     const tipos = [...porTipo.values()].map((t) => ({
-      ...TIPO[t.id], total: t.total, qtd: t.qtd, pct: total ? Math.round((t.total / total) * 100) : 0,
+      ...infoTipo(t.id), total: t.total, qtd: t.qtd, pct: total ? Math.round((t.total / total) * 100) : 0,
       descricoes: [...t.descricoes.values()].sort((a, b) => b.total - a.total),
     })).sort((a, b) => b.total - a.total);
 
@@ -410,7 +454,7 @@
     let evolucao = null;
     if (mes != null && tipos.length) {
       const alvo = tipos[0].id;
-      evolucao = { tipo: TIPO[alvo], meses: [] };
+      evolucao = { tipo: infoTipo(alvo), meses: [] };
       for (let i = 5; i >= 0; i--) {
         const { ano: a, mes: m } = somarMeses(ano, mes, -i);
         const doMes = lista.filter((l) => ehDespesa(l) && l.ano === a && l.mes === m).flatMap(partesGasto).filter((p) => p.tipoGasto);
@@ -567,7 +611,7 @@
   function lerBackup(obj) {
     if (Array.isArray(obj)) return { lancamentos: migrarAntigo(obj), perfil: null, origem: 'antigo' };
     if (obj && Array.isArray(obj.lancamentos)) {
-      return { lancamentos: obj.lancamentos.map(limpar).filter(Boolean), perfil: obj.perfil || null, origem: 'vertice' };
+      return { lancamentos: obj.lancamentos.map(limpar).filter(Boolean), tiposGasto: limparTiposGasto(obj.tiposGasto), perfil: obj.perfil || null, origem: 'vertice' };
     }
     throw new Error('Arquivo não reconhecido como backup do Vértice.');
   }
@@ -785,8 +829,8 @@
       valores[l.categoria] += l.centavos;
       if (CAT[l.categoria].tipo !== 'saida') continue;
       for (const p of partesGasto(l)) {
-        if (!p.tipoGasto || !TIPO[p.tipoGasto]) continue;
-        const t = porTipo.get(p.tipoGasto) || { ...TIPO[p.tipoGasto], total: 0, porCat: {} };
+        if (!p.tipoGasto || !tipoValido(p.tipoGasto)) continue;
+        const t = porTipo.get(p.tipoGasto) || { ...infoTipo(p.tipoGasto), total: 0, porCat: {} };
         t.total += p.centavos; t.porCat[l.categoria] = (t.porCat[l.categoria] || 0) + p.centavos;
         porTipo.set(p.tipoGasto, t);
       }
@@ -858,9 +902,8 @@
       const v = x.valores?.[c.id];
       if (Number.isInteger(v) && v >= 0 && v <= 1e11) valores[c.id] = v;
     }
-    for (const t of TIPOS_GASTO) {
-      const v = x.tipos?.[t.id];
-      if (Number.isInteger(v) && v > 0 && v <= 100) tipos[t.id] = v;
+    for (const [id, v] of Object.entries(x.tipos || {}).slice(0, 80)) {
+      if (tipoValido(id) && Number.isInteger(v) && v > 0 && v <= 100) tipos[id] = v;
     }
     return {
       id: String(x.id || novoId()).slice(0, 80), nome, base: x.base === 'media3' ? 'media3' : 'mes',
@@ -872,6 +915,7 @@
     LIMITES_PLANO, novoPlano, totaisPlano, limparPlano, csvPlano,
     CARTOES_SUGERIDOS, mesmoCartao, painel, detalhesCategoria, periodoAnterior, variacao,
     TIPOS_GASTO, TIPO, sugerirTipoGasto, gastos,
+    MAX_TIPOS_PROPRIOS, tipoValido, infoTipo, limparTiposGasto, definirTiposProprios, todosTipos, novoTipoGasto,
     MAX_COMPRAS, limparCompras, somaCompras, partesGasto, comprasFixasAnteriores, lerComprasDoTexto,
     PERIODOS, PERIODO, PLANOS_ASSINATURA, PLANO_ASSINATURA, PRECOS_PADRAO, limparPrecos, precoPeriodo, opcoesAssinatura,
     MAX_CENARIOS, PCTS_TIPO, baseSimulacao, simular, impactoMetas, limparCenario,

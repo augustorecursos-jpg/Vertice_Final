@@ -522,3 +522,38 @@ test('fatura do cartão com compras detalhadas: valor, tipos, resto não detalha
   ]);
   assert.equal(t.sobra, 'Fatura fecha dia 20.');
 });
+
+test('tipos de gasto próprios: criar, validar, usar na análise e no simulador', () => {
+  const r1 = N.novoTipoGasto('  Viagem de trabalho ', []);
+  assert.deepEqual(r1, { tipo: { id: 'u:viagem-de-trabalho', nome: 'Viagem de trabalho', emoji: '🏷️', proprio: true }, novo: true });
+  assert.equal(N.novoTipoGasto('viagem', []).tipo.id, 'viagem'); // reaproveita o tipo que já existe
+  assert.equal(N.novoTipoGasto('SAÚDE', []).novo, false);
+  assert.equal(N.novoTipoGasto('Viagem de Trabalho', [r1.tipo]).novo, false);
+  assert.equal(N.novoTipoGasto('Viagem-de trabalho!', [{ id: 'u:viagem-de-trabalho', nome: 'Outro nome' }]).tipo.id, 'u:viagem-de-trabalho-2');
+  assert.equal(N.novoTipoGasto('  ', []), null);
+  assert.deepEqual(N.limparTiposGasto([{ id: 'u:a', nome: 'A' }, { id: 'u:a', nome: 'Dup' }, { id: 'x', nome: 'Inválido' }, { id: 'u:b', nome: '' }]).map((t) => t.id), ['u:a']);
+
+  const ls = N.gerar({ desc: 'Hotel congresso', centavos: 90000, categoria: 'variavel', ano: 2026, mes: 9, dia: 3, tipoGasto: 'u:viagem-de-trabalho' });
+  ls.push(...N.gerar({ desc: 'Fatura', centavos: 5000, categoria: 'cartao', cartao: 'Nubank', ano: 2026, mes: 9, dia: 3, compras: [{ desc: 'Uber aeroporto', centavos: 5000, tipoGasto: 'u:viagem-de-trabalho' }] }));
+  assert.equal(ls[0].tipoGasto, 'u:viagem-de-trabalho');
+  assert.equal(N.limpar(ls[1]).compras[0].tipoGasto, 'u:viagem-de-trabalho');
+  assert.equal(N.limpar({ ...ls[0], tipoGasto: 'u:ruim!' }).tipoGasto, null);
+  // sem registrar: nome legível a partir do id
+  let g = N.gastos(ls, 2026, 9);
+  assert.equal(g.tipos[0].nome, 'Viagem de trabalho');
+  assert.equal(g.tipos[0].total, 95000);
+  // registrado: usa o nome que a pessoa digitou
+  N.definirTiposProprios([{ id: 'u:viagem-de-trabalho', nome: 'Viagens a trabalho' }]);
+  g = N.gastos(ls, 2026, 9);
+  assert.equal(g.tipos[0].nome, 'Viagens a trabalho');
+  assert.equal(N.todosTipos().length, 13);
+  assert.equal(N.sugerirTipoGasto('hotel congresso', ls), 'u:viagem-de-trabalho');
+  const b = N.baseSimulacao(ls, 2026, 9);
+  assert.equal(b.tipos[0].id, 'u:viagem-de-trabalho');
+  const res = N.simular(b, { tipos: { 'u:viagem-de-trabalho': 50 } });
+  assert.equal(res.reducao.variavel, 45000);
+  assert.deepEqual(N.limparCenario({ nome: 'X', tipos: { 'u:viagem-de-trabalho': 50, 'u:x!': 10 } }).tipos, { 'u:viagem-de-trabalho': 50 });
+  N.definirTiposProprios([]);
+  assert.equal(N.todosTipos().length, 12);
+  assert.equal(N.TIPO['u:viagem-de-trabalho'], undefined);
+});
