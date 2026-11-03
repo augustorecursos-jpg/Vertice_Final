@@ -45,6 +45,7 @@
     email: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>',
     cartao: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h2M11 15h3"/>',
     pizza: '<path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/>',
+    desce2: '<path d="m6 9 6 6 6-6"/>',
     alvo: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
     brilho: '<path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/>',
     nota: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
@@ -144,7 +145,7 @@
   const agora = new Date();
   const est = {
     secao: 'mes', ano: agora.getFullYear(), mes: agora.getMonth(),
-    filtro: 'todos', filtroProvisao: null, filtroCartao: null, painelAno: false, painelCats: new Set(), painelAbertas: new Set(), busca: '', ordem: prefs.ordem, abertas: new Set(),
+    filtro: 'todos', filtroProvisao: null, filtroCartao: null, painelAno: false, painelCats: new Set(), painelAbertas: new Set(), painelAba: 'resumo', gastosAbertos: new Set(), busca: '', ordem: prefs.ordem, abertas: new Set(),
   };
 
   // ---------- toast ----------
@@ -253,7 +254,22 @@
       if (!b) return;
       cartaoSel.definir(b.dataset.cartao);
     });
+    // Tipo de gasto: sugerido pela descrição até a pessoa escolher um.
+    f('f-tipos').innerHTML = `<label><input type="radio" name="tg" value=""><span>Sem tipo</span></label>${N.TIPOS_GASTO.map((t) => `<label><input type="radio" name="tg" value="${t.id}"><span>${t.emoji} ${esc(t.nome)}</span></label>`).join('')}`;
+    let tipoManual = !!l.tipoGasto;
+    const marcarTipo = (id) => { const r = $(`input[name=tg][value="${id || ''}"]`, modal); if (r) r.checked = true; };
+    marcarTipo(l.tipoGasto || '');
+    function sugerirTipo() {
+      if (tipoManual) return;
+      const sug = N.sugerirTipoGasto(f('f-desc').value, dados.lancamentos);
+      marcarTipo(sug || '');
+      f('dica-tipo').textContent = sug ? `Sugerido pela descrição: ${N.TIPO[sug].nome}. Toque em outro para trocar.` : '';
+    }
+    f('f-tipos').addEventListener('change', () => { tipoManual = true; f('dica-tipo').textContent = ''; });
+    f('f-desc').addEventListener('input', sugerirTipo);
+    function mostrarTipo() { f('bloco-tipo').hidden = CAT[$('input[name=cat]:checked', modal)?.value]?.tipo !== 'saida'; }
     function mostrarCartao() {
+      mostrarTipo();
       const ehCartao = $('input[name=cat]:checked', modal)?.value === 'cartao';
       f('bloco-cartao').hidden = !ehCartao;
       $$('[data-cartao]', modal).forEach((b) => b.classList.toggle('ativo', N.mesmoCartao(b.dataset.cartao, cartaoSel.ler())));
@@ -343,6 +359,7 @@
       const obs = f('f-obs').value.trim();
       const provisao = f('bloco-prov').hidden ? null : (f('f-prov').value || null);
       const cartao = f('bloco-cartao').hidden ? '' : cartaoSel.ler();
+      const tipoGasto = f('bloco-tipo').hidden ? null : ($('input[name=tg]:checked', modal)?.value || null);
       if (!f('bloco-cartao').hidden && f('f-cartao').value === OUTRO && !cartao) {
         f('f-cartao-outro').focus();
         return toast('Digite o nome do banco ou escolha um da lista.', { erro: true });
@@ -361,7 +378,7 @@
       if (existente) {
         const escopo = await escolherEscopo(existente, 'Editar');
         if (!escopo) return;
-        dados.lancamentos = N.editar(dados.lancamentos, existente.id, { desc, obs, provisao, cartao, centavos, categoria, ...data }, escopo);
+        dados.lancamentos = N.editar(dados.lancamentos, existente.id, { desc, obs, provisao, cartao, tipoGasto, centavos, categoria, ...data }, escopo);
         fechar(); salvar();
         toast('Lançamento atualizado.');
         return;
@@ -370,7 +387,7 @@
       const rec = val('rec');
       const qtd = Math.floor(+f('f-qtd').value);
       if (rec !== 'unica' && !(qtd >= 2 && qtd <= 120)) { f('f-qtd').focus(); return toast('A quantidade deve ficar entre 2 e 120.', { erro: true }); }
-      const novos = N.gerar({ desc, obs, provisao, cartao, centavos, categoria, ...data, recorrencia: rec, quantidade: qtd, modoValor: val('modo') });
+      const novos = N.gerar({ desc, obs, provisao, cartao, tipoGasto, centavos, categoria, ...data, recorrencia: rec, quantidade: qtd, modoValor: val('modo') });
       dados.lancamentos.push(...novos);
       fechar(); salvar();
       const msg = novos.length > 1 ? `${novos.length} lançamentos criados.` : 'Lançamento criado.';
@@ -537,7 +554,7 @@
       `<button type="button" data-filtro-cartao="${esc(k)}" class="${est.filtroCartao === k ? 'ativo' : ''}" aria-pressed="${est.filtroCartao === k}">${esc(c.nome)} <b>${moeda(c.total)}</b></button>`).join('')}` : '';
     if (est.filtroCartao && est.filtro !== 'atrasados') itens = itens.filter((l) => l.categoria === 'cartao' && N.normalizar(l.cartao || 'Sem cartão definido') === est.filtroCartao);
     const q = N.normalizar(est.busca.trim());
-    if (q) itens = itens.filter((l) => N.normalizar(`${l.desc} ${l.obs || ''} ${CAT[l.categoria].nome} ${l.cartao || ''} ${nomeProvisao(l.provisao) || ''}`).includes(q));
+    if (q) itens = itens.filter((l) => N.normalizar(`${l.desc} ${l.obs || ''} ${CAT[l.categoria].nome} ${l.cartao || ''} ${nomeProvisao(l.provisao) || ''} ${N.TIPO[l.tipoGasto]?.nome || ''}`).includes(q));
     const ord = {
       venc: (a, b) => N.dataDe(a) - N.dataDe(b) || a.pago - b.pago || b.centavos - a.centavos,
       maior: (a, b) => b.centavos - a.centavos,
@@ -583,7 +600,7 @@
           aria-label="${l.pago ? 'Desmarcar' : 'Marcar como ' + c.feito.toLowerCase()}: ${esc(l.desc)}" title="${l.pago ? 'Desmarcar' : 'Marcar como ' + c.feito.toLowerCase()}">${ic('check')}</button>
         <div class="data" aria-hidden="true"><b>${d.getDate()}</b><small>${MESES_CURTOS[d.getMonth()]}${outroMes ? ' ' + String(d.getFullYear()).slice(2) : ''}</small></div>
         <div class="desc"><b title="${esc(N.titulo(l))}">${esc(l.desc)}</b>
-          <div class="tags"><span class="tag quando neutra">${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span><span class="tag cat" data-cat="${l.categoria}">${esc(nomeCategoria(l.categoria, l.cartao))}</span>${serie}${l.provisao && nomeProvisao(l.provisao) ? `<span class="tag prov-tag" title="Provisão">${ic('alvo')} ${esc(nomeProvisao(l.provisao))}</span>` : ''}${situ}</div>${l.obs ? `<div class="obs"><button type="button" data-acao="obs" aria-expanded="false" title="${esc(l.obs)}">${ic('nota')}<span>${esc(l.obs)}</span></button></div>` : ''}</div>
+          <div class="tags"><span class="tag quando neutra">${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span><span class="tag cat" data-cat="${l.categoria}">${esc(nomeCategoria(l.categoria, l.cartao))}</span>${l.tipoGasto && N.TIPO[l.tipoGasto] ? `<span class="tag neutra">${esc(nomeTipo(l.tipoGasto))}</span>` : ''}${serie}${l.provisao && nomeProvisao(l.provisao) ? `<span class="tag prov-tag" title="Provisão">${ic('alvo')} ${esc(nomeProvisao(l.provisao))}</span>` : ''}${situ}</div>${l.obs ? `<div class="obs"><button type="button" data-acao="obs" aria-expanded="false" title="${esc(l.obs)}">${ic('nota')}<span>${esc(l.obs)}</span></button></div>` : ''}</div>
         <div class="valor">${c.tipo === 'entrada' ? '+ ' : ''}${moeda(l.centavos)}</div>
         <div class="acoes">
           <button type="button" class="btn fantasma icone peq" data-acao="editar" data-id="${esc(l.id)}" aria-label="Editar ${esc(l.desc)}" title="Editar">${ic('editar')}</button>
@@ -690,6 +707,97 @@
     $('#perfil-login').textContent = eu.login;
     const n = dados.lancamentos.length;
     $('#info-backup').textContent = `${n} ${n === 1 ? 'lançamento salvo' : 'lançamentos salvos'} na sua conta. Baixe uma cópia quando quiser guardar ou levar para uma planilha.`;
+  }
+
+  // ---------- onde estou gastando ----------
+  const nomeTipo = (id) => (N.TIPO[id] ? `${N.TIPO[id].emoji} ${N.TIPO[id].nome}` : '');
+  function htmlGastos(mes, filtroCats) {
+    const g = N.gastos(dados.lancamentos, est.ano, mes, { categorias: filtroCats });
+    if (!g.qtd) return `<div class="cartao"><div class="vazio">${ILUSTRA}<h3>Nenhuma despesa neste período</h3><p>Lance despesas ou gastos no cartão e escolha o tipo de gasto (Alimentação, Mercado, Transporte…) para ver aqui onde o dinheiro está indo.</p></div></div>`;
+    const mesNome = (a, m) => `${MESES[m].toLowerCase()}/${a}`;
+    const tiles = [
+      `<div class="kpi dash-kpi"><span class="rot">Maior tipo de gasto</span><div class="val">${g.maior ? esc(nomeTipo(g.maior.id)) : '–'}</div>
+        <div class="det">${g.maior ? `${moeda(g.maior.total)} · ${g.maior.pct}% das despesas` : 'Classifique os lançamentos para ver'}</div></div>`,
+      `<div class="kpi ${g.semTipo.qtd ? 'vermelho' : 'verde'} dash-kpi"><span class="rot">Lançamentos sem tipo</span><div class="val">${g.semTipo.qtd}</div>
+        <div class="det">${g.semTipo.qtd ? `${moeda(g.semTipo.total)} · <button type="button" class="link-acao" data-classificar>classificar agora</button>` : 'Tudo classificado'}</div></div>`,
+      `<div class="kpi indigo dash-kpi"><span class="rot">Parcelas já comprometidas</span><div class="val">${moeda(g.parcelas.proximoMes)}</div>
+        <div class="det">${g.parcelas.ate ? `no próximo mês · última parcela em ${mesNome(g.parcelas.ate.ano, g.parcelas.ate.mes)}` : 'Nenhuma parcela futura'}</div></div>`,
+    ];
+    const max = Math.max(1, ...g.tipos.map((t) => t.total));
+    const barras = g.tipos.length ? g.tipos.map((t) => {
+      const aberto = est.gastosAbertos.has(t.id);
+      const sub = aberto ? `<div class="sub-tipo">${t.descricoes.slice(0, 8).map((d) => `<div><b>${esc(d.desc)}</b><span>${d.qtd}×</span><span>${moeda(d.total)}</span></div>`).join('')}
+        ${t.descricoes.length > 8 ? `<div><b>+ ${t.descricoes.length - 8} outras descrições</b><span></span><span>${moeda(t.descricoes.slice(8).reduce((a, d) => a + d.total, 0))}</span></div>` : ''}</div>` : '';
+      return `<div class="barra-tipo ${aberto ? 'aberta' : ''}">
+        <button type="button" class="nome" data-gtipo="${t.id}" aria-expanded="${aberto}">${ic(aberto ? 'desce2' : 'dir')}<span class="emoji">${t.emoji}</span> <b>${esc(t.nome)}</b></button>
+        <span class="trilho"><span data-tip="${esc(`${t.nome}|${moeda(t.total)}|${t.qtd} ${t.qtd === 1 ? 'lançamento' : 'lançamentos'} · ${t.pct}% das despesas`)}" tabindex="0" style="width:${Math.max(1.5, (t.total / max) * 100)}%"></span></span>
+        <span class="v">${moeda(t.total)}</span><span class="p">${t.pct}%</span></div>${sub}`;
+    }).join('') : '<p class="suave">Nenhuma despesa com tipo de gasto ainda. Escolha o tipo ao lançar, ou use “classificar agora”.</p>';
+
+    const alertas = g.alertas.map((a) => {
+      if (a.cod === 'subiu') return `<li class="at">${ic('sobe')}<span><b>${esc(a.tipo.nome)} subiu ${a.pct}%</b> em relação ao período anterior (${moeda(a.de)} → ${moeda(a.para)}).</span></li>`;
+      if (a.cod === 'assinaturas') return `<li>${ic('relogio')}<span><b>${a.qtd} ${a.qtd === 1 ? 'assinatura' : 'assinaturas'}</b> ${a.qtd === 1 ? 'soma' : 'somam'} ${moeda(a.total)}: ${esc(a.nomes.slice(0, 5).join(', '))}.</span></li>`;
+      return `<li class="at">${ic('cartao')}<span><b>Parcelas</b> já comprometem ${moeda(a.total)} no próximo mês${a.ate ? `, até ${mesNome(a.ate.ano, a.ate.mes)}` : ''}.</span></li>`;
+    }).join('') || '<li>' + ic('check') + '<span>Nada fora do comum neste período.</span></li>';
+
+    const ev = g.evolucao;
+    const evolucao = ev ? (() => {
+      const mx = Math.max(1, ...ev.meses.flatMap((m) => [m.alvo, m.media]));
+      return `<div class="grafico-ovr seis">${ev.meses.map((m) => `<div class="col-ovr"><div class="barras">
+          <span class="o" style="height:${(m.media / mx) * 100}%" data-tip="${esc(`Média dos demais tipos|${moeda(m.media)}|${MESES[m.mes]} de ${m.ano}`)}" tabindex="0"></span>
+          <span class="r" style="height:${(m.alvo / mx) * 100}%" data-tip="${esc(`${ev.tipo.nome}|${moeda(m.alvo)}|${MESES[m.mes]} de ${m.ano}`)}" tabindex="0"></span></div><small>${MESES_CURTOS[m.mes].toLowerCase()}</small></div>`).join('')}</div>
+        <div class="legenda-ovr"><span><i style="background:var(--primaria)"></i>${esc(ev.tipo.nome)}</span><span><i style="background:#c3cfdc"></i>Média dos demais tipos</span></div>`;
+    })() : '<p class="suave">A evolução mensal aparece no período Mês.</p>';
+
+    const somaCartao = (id) => g.cartoes.reduce((a, c) => a + (c.porTipo[id] || 0), 0);
+    const tiposCartao = g.tipos.filter((t) => somaCartao(t.id) > 0).sort((a, b) => somaCartao(b.id) - somaCartao(a.id)).slice(0, 3);
+    const cartoes = g.cartoes.length ? `<table class="tab-dash rolavel"><thead><tr><th scope="col">Cartão</th>${tiposCartao.map((t) => `<th scope="col" class="num">${esc(t.nome)}</th>`).join('')}<th scope="col" class="num">Outros</th><th scope="col" class="num">Total</th></tr></thead><tbody>
+      ${g.cartoes.map((c) => {
+        const principais = tiposCartao.reduce((a, t) => a + (c.porTipo[t.id] || 0), 0);
+        return `<tr><th scope="row">${esc(c.nome)}</th>${tiposCartao.map((t) => `<td class="num">${c.porTipo[t.id] ? moeda(c.porTipo[t.id]) : '–'}</td>`).join('')}<td class="num">${c.total - principais ? moeda(c.total - principais) : '–'}</td><td class="num"><b>${moeda(c.total)}</b></td></tr>`;
+      }).join('')}</tbody></table>` : '<p class="suave">Nenhum gasto no cartão neste período.</p>';
+
+    const maiores = `<ol class="estabs">${g.maioresDescricoes.map((d) => `<li><span>${esc(d.desc)}${d.tipoGasto ? ` <small>· ${esc(N.TIPO[d.tipoGasto].nome)}</small>` : ''}</span><small>${d.qtd}×</small><b>${moeda(d.total)}</b></li>`).join('')}</ol>`;
+
+    return `<div class="cards dash-cards" style="--n:3;grid-template-columns:repeat(3,1fr)">${tiles.join('')}</div>
+      <div class="dash-grade">
+        <div class="cartao"><div class="cartao-cab"><div><h2>Onde você mais gastou</h2><p>Toque em um tipo para ver as descrições lançadas</p></div></div><div class="barras-tipo">${barras}</div></div>
+        <div class="dash-coluna">
+          <div class="cartao"><div class="cartao-cab"><div><h2>Alertas do período</h2></div></div><ul class="alertas-lista">${alertas}</ul></div>
+          <div class="cartao"><div class="cartao-cab"><div><h2>Evolução por tipo (6 meses)</h2><p>${ev ? `${esc(ev.tipo.nome)} em destaque, a média dos demais em cinza` : ''}</p></div></div>${evolucao}</div>
+        </div>
+        <div class="cartao"><div class="cartao-cab"><div><h2>Tipo de gasto por cartão</h2><p>Quanto de cada cartão foi para cada tipo</p></div></div>${cartoes}</div>
+        <div class="cartao"><div class="cartao-cab"><div><h2>Maiores gastos por descrição</h2><p>Somando todas as vezes no período</p></div></div>${maiores}</div>
+      </div>`;
+  }
+
+  /** Classificar de uma vez os lançamentos sem tipo de gasto do período. */
+  function classificarSemTipo() {
+    const mes = est.painelAno ? null : est.mes;
+    const filtroCats = [...est.painelCats];
+    const ids = new Set(N.gastos(dados.lancamentos, est.ano, mes, { categorias: filtroCats }).semTipo.ids);
+    const itens = dados.lancamentos.filter((l) => ids.has(l.id)).sort((a, b) => N.dataDe(a) - N.dataDe(b));
+    if (!itens.length) return;
+    const opcoes = (sel) => `<option value="">Sem tipo</option>${N.TIPOS_GASTO.map((t) => `<option value="${t.id}" ${sel === t.id ? 'selected' : ''}>${t.emoji} ${esc(t.nome)}</option>`).join('')}`;
+    const { modal, fechar } = abrirModal(`
+      <form class="modal largo" role="dialog" aria-modal="true" aria-labelledby="t-class" novalidate>
+        <div class="cab-modal"><h2 id="t-class">Classificar gastos sem tipo</h2><button type="button" class="btn fantasma icone" data-fechar aria-label="Fechar"><i data-ic="x"></i></button></div>
+        <p style="margin-top:0" class="suave">Os tipos sugeridos vêm da descrição e das suas escolhas anteriores. Ajuste o que precisar e salve.</p>
+        <div class="tabela-wrap" style="max-height:55vh;overflow:auto"><table class="t simples classificar"><thead><tr><th>Data</th><th>Descrição</th><th class="num">Valor</th><th>Tipo de gasto</th></tr></thead><tbody>
+        ${itens.map((l) => `<tr><td>${N.dataDe(l).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</td><td><b>${esc(N.titulo(l))}</b><small class="suave" style="display:block">${esc(nomeCategoria(l.categoria, l.cartao))}</small></td>
+          <td class="num">${moeda(l.centavos)}</td><td><select data-classif="${esc(l.id)}" aria-label="Tipo de gasto de ${esc(l.desc)}">${opcoes(N.sugerirTipoGasto(l.desc, dados.lancamentos))}</select></td></tr>`).join('')}
+        </tbody></table></div>
+        <div class="rodape-modal"><button type="button" class="btn sec" data-fechar>Cancelar</button><button class="btn">${ic('check')} Salvar classificação</button></div>
+      </form>`);
+    modal.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const escolhas = new Map($$('[data-classif]', modal).filter((s) => s.value).map((s) => [s.dataset.classif, s.value]));
+      if (!escolhas.size) return toast('Escolha o tipo de pelo menos um lançamento.', { erro: true });
+      const antes = dados.lancamentos;
+      dados.lancamentos = dados.lancamentos.map((l) => (escolhas.has(l.id) ? { ...l, tipoGasto: escolhas.get(l.id) } : l));
+      fechar(); salvar();
+      toast(`${escolhas.size} ${escolhas.size === 1 ? 'lançamento classificado' : 'lançamentos classificados'}.`, { acao: () => { dados.lancamentos = antes; salvar(); } });
+    });
   }
 
   // ---------- dashboard ----------
@@ -799,12 +907,16 @@
           <button type="button" data-pcat="" class="${filtroCats.length ? '' : 'ativo'}" aria-pressed="${!filtroCats.length}">Todas</button>
           ${CATEGORIAS.map((c) => `<button type="button" data-pcat="${c.id}" data-cat="${c.id}" class="${est.painelCats.has(c.id) ? 'ativo' : ''}" aria-pressed="${est.painelCats.has(c.id)}"><span class="chave"></span>${esc(c.nome)}</button>`).join('')}
         </div>
+        <div class="abas-dash" role="tablist" aria-label="Visão do dashboard">
+          <button type="button" role="tab" data-aba="resumo" aria-selected="${est.painelAba === 'resumo'}" class="${est.painelAba === 'resumo' ? 'ativo' : ''}">Resumo</button>
+          <button type="button" role="tab" data-aba="gastos" aria-selected="${est.painelAba === 'gastos'}" class="${est.painelAba === 'gastos' ? 'ativo' : ''}">Onde estou gastando</button>
+        </div>
         <div class="alternar" role="group" aria-label="Período">
           <button type="button" data-periodo="mes" aria-pressed="${!est.painelAno}" class="${est.painelAno ? '' : 'ativo'}">Mês</button>
           <button type="button" data-periodo="ano" aria-pressed="${!!est.painelAno}" class="${est.painelAno ? 'ativo' : ''}">Ano</button>
         </div>
       </div>
-      <div class="cards dash-cards" style="--n:${tiles.length}">${tiles.join('')}</div>
+      ${est.painelAba === 'gastos' ? htmlGastos(mes, filtroCats) : `<div class="cards dash-cards" style="--n:${tiles.length}">${tiles.join('')}</div>
       <div class="dash-grade">
         <div class="cartao dash-categorias">
           <div class="cartao-cab"><div><h2>Total por categoria</h2><p>Toque em uma categoria para ver as descrições.</p></div>
@@ -836,7 +948,7 @@
           <div class="cartao-cab"><div><h2>Maiores despesas</h2><p>Os 5 maiores lançamentos do período</p></div></div>
           ${maiores}
         </div>
-      </div>`;
+      </div>`}`;
     hidratar(raiz);
   }
 
@@ -865,6 +977,15 @@
     raiz.addEventListener('click', (e) => {
       const b = e.target.closest('[data-periodo]');
       if (b) { est.painelAno = b.dataset.periodo === 'ano'; render(); return; }
+      const aba = e.target.closest('[data-aba]');
+      if (aba) { est.painelAba = aba.dataset.aba; render(); return; }
+      const gt = e.target.closest('[data-gtipo]');
+      if (gt) {
+        const id = gt.dataset.gtipo;
+        if (est.gastosAbertos.has(id)) est.gastosAbertos.delete(id); else est.gastosAbertos.add(id);
+        render(); $(`#dashboard [data-gtipo="${id}"]`)?.focus(); return;
+      }
+      if (e.target.closest('[data-classificar]')) { classificarSemTipo(); return; }
       const fc = e.target.closest('[data-pcat]');
       if (fc) {
         const id = fc.dataset.pcat;

@@ -332,3 +332,59 @@ test('dashboard: filtro de categorias e detalhe por descrição', () => {
   assert.deepEqual(notebook.map((d) => [d.desc, d.total, d.qtd]), [['Notebook', 350000, 4]]);
   assert.deepEqual(notebook[0].cartoes, ['Nubank', 'Itaú']);
 });
+
+test('tipo de gasto: só em despesas, mantido na série e limpo nos demais', () => {
+  const ls = N.gerar({ desc: 'Notebook', centavos: 300000, categoria: 'cartao', cartao: 'Nubank', tipoGasto: 'compras', ano: 2026, mes: 9, dia: 5, recorrencia: 'parcelada', quantidade: 3 }, ids);
+  assert.ok(ls.every((l) => l.tipoGasto === 'compras'));
+  assert.equal(N.gerar({ desc: 'Salário', centavos: 1, categoria: 'receita', tipoGasto: 'compras', ano: 2026, mes: 9, dia: 5 }, ids)[0].tipoGasto, null);
+  assert.equal(N.gerar({ desc: 'X', centavos: 1, categoria: 'fixa', tipoGasto: 'inexistente', ano: 2026, mes: 9, dia: 5 }, ids)[0].tipoGasto, null);
+  const d = { desc: 'Notebook', centavos: 100000, categoria: 'cartao', dia: 5, ano: 2026, mes: 10 };
+  assert.deepEqual(N.editar(ls, ls[1].id, { ...d, tipoGasto: 'educacao' }, 'proximos').map((l) => l.tipoGasto), ['compras', 'educacao', 'educacao']);
+  assert.equal(N.editar(ls, ls[0].id, d, 'este')[0].tipoGasto, 'compras');
+  assert.equal(N.editar(ls, ls[0].id, { ...d, categoria: 'investimento' }, 'este')[0].tipoGasto, null);
+  assert.equal(N.limpar({ ...ls[0], tipoGasto: 'pets' }).tipoGasto, 'pets');
+  assert.equal(N.limpar({ ...ls[0], tipoGasto: 'xyz' }).tipoGasto, null);
+});
+
+test('tipo de gasto: sugestão aprende com o que a pessoa já usou', () => {
+  assert.equal(N.sugerirTipoGasto('iFood'), 'alimentacao');
+  assert.equal(N.sugerirTipoGasto('Mercado Livre'), 'compras');
+  assert.equal(N.sugerirTipoGasto('Loja do Zé'), 'compras');
+  assert.equal(N.sugerirTipoGasto('Xyz'), null);
+  const antigos = N.gerar({ desc: 'Loja do Zé', centavos: 1, categoria: 'variavel', tipoGasto: 'pets', ano: 2026, mes: 1, dia: 1 }, ids);
+  assert.equal(N.sugerirTipoGasto('loja do ze', antigos), 'pets');
+});
+
+test('onde estou gastando: totais por tipo, sem tipo, cartões, parcelas futuras, evolução e alertas', () => {
+  const g = (f) => N.gerar({ ano: 2026, mes: 9, dia: 5, categoria: 'cartao', cartao: 'Nubank', ...f }, ids);
+  const ls = [
+    ...g({ desc: 'iFood', centavos: 30000, tipoGasto: 'alimentacao' }),
+    ...g({ desc: 'iFood', centavos: 20000, tipoGasto: 'alimentacao', dia: 9 }),
+    ...g({ desc: 'Restaurante', centavos: 15000, tipoGasto: 'alimentacao', cartao: 'Itaú' }),
+    ...g({ desc: 'Netflix', centavos: 5590, tipoGasto: 'assinaturas' }),
+    ...g({ desc: 'Spotify', centavos: 2190, tipoGasto: 'assinaturas' }),
+    ...g({ desc: 'Geladeira', centavos: 360000, tipoGasto: 'compras', recorrencia: 'parcelada', quantidade: 6 }),
+    ...g({ desc: 'Sem classificação', centavos: 4000, categoria: 'variavel', cartao: '' }),
+    ...g({ desc: 'Salário', centavos: 900000, categoria: 'receita' }),
+    ...g({ desc: 'iFood', centavos: 30000, tipoGasto: 'alimentacao', mes: 8 }),
+  ];
+  const r = N.gastos(ls, 2026, 9);
+  assert.equal(r.total, 30000 + 20000 + 15000 + 5590 + 2190 + 60000 + 4000);
+  assert.deepEqual(r.tipos.map((t) => [t.id, t.total]), [['alimentacao', 65000], ['compras', 60000], ['assinaturas', 7780]]);
+  assert.deepEqual(r.tipos[0].descricoes.map((d) => [d.desc, d.qtd, d.total]), [['iFood', 2, 50000], ['Restaurante', 1, 15000]]);
+  assert.deepEqual([r.semTipo.qtd, r.semTipo.total], [1, 4000]);
+  assert.equal(r.maior.id, 'alimentacao');
+  assert.deepEqual(r.cartoes.map((c) => [c.nome, c.total]), [['Nubank', 117780], ['Itaú', 15000]]);
+  assert.equal(r.cartoes[0].porTipo.alimentacao, 50000);
+  assert.equal(r.maioresDescricoes[0].desc, 'Geladeira');
+  assert.equal(r.parcelas.proximoMes, 60000);
+  assert.deepEqual(r.parcelas.ate, { ano: 2027, mes: 2 });
+  assert.equal(r.evolucao.meses.length, 6);
+  assert.deepEqual(r.evolucao.meses.at(-1), { ano: 2026, mes: 9, alvo: 65000, media: 33890 });
+  const cods = r.alertas.map((a) => a.cod);
+  assert.ok(cods.includes('subiu') && cods.includes('assinaturas') && cods.includes('parcelas'));
+  assert.equal(r.alertas.find((a) => a.cod === 'subiu').pct, 117);
+  const soCartao = N.gastos(ls, 2026, 9, { categorias: ['variavel'] });
+  assert.deepEqual([soCartao.total, soCartao.tipos.length, soCartao.semTipo.qtd], [4000, 0, 1]);
+  assert.equal(N.gastos(ls, 2026).evolucao, null);
+});
