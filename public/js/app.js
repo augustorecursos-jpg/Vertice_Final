@@ -79,6 +79,7 @@
 
   // ---------- servidor ----------
   let eu = null;                     // usuário logado
+  let modoEmpresa = false;           // usuário de empresa: a tela é do Vértice Empresas (empresa.js)
   let dados = { lancamentos: [], planos: [], provisoes: [], cenarios: [] };   // lançamentos, planejamentos, provisões e cenários do simulador
   let rev = 0;                       // revisão dos dados no servidor
 
@@ -132,7 +133,7 @@
   }
   /** Traz alterações feitas em outro dispositivo (ao voltar para a aba). */
   async function atualizarDoServidor() {
-    if (sinc.ocupado || sinc.estado !== 'ok' || $('.fundo-modal') || document.activeElement?.closest('#planos')) return;
+    if (modoEmpresa || sinc.ocupado || sinc.estado !== 'ok' || $('.fundo-modal') || document.activeElement?.closest('#planos')) return;
     try {
       const d = await api('GET', '/api/dados');
       if (d.rev !== rev && !sinc.ocupado) { rev = d.rev; dados.lancamentos = d.lancamentos; dados.planos = d.planos || []; dados.provisoes = d.provisoes || []; dados.cenarios = d.cenarios || []; render(); }
@@ -439,6 +440,7 @@
     render();
   }
   function lerHash() {
+    if (modoEmpresa) return;
     const [s, sub] = location.hash.replace('#', '').split('/');
     est.secao = ['mes', 'dashboard', 'ano', 'planos', 'sim', 'ajustes'].includes(s) || (['usuarios', 'empresas'].includes(s) && eu?.perfil === 'admin') ? s : 'mes';
     est.plano = s === 'planos' && sub ? decodeURIComponent(sub) : null;
@@ -448,6 +450,7 @@
 
   // ---------- render ----------
   function render() {
+    if (modoEmpresa) return;
     $$('main > section').forEach((s) => { s.hidden = s.dataset.secao !== est.secao; });
     $$('#menu a').forEach((a) => a.classList.toggle('ativo', a.dataset.secao === est.secao));
     $$('#menu a').forEach((a) => { if (a.dataset.secao === est.secao) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
@@ -1221,6 +1224,7 @@
     });
   }
 
+  let ligarTip = () => {};
   // Tooltip único para as barras do dashboard (valor em destaque, rótulo depois).
   function ligarTooltipDashboard() {
     const tip = document.createElement('div');
@@ -1238,12 +1242,13 @@
       tip.style.left = `${Math.min(window.innerWidth - w - 8, Math.max(8, x - w / 2))}px`;
       tip.style.top = `${Math.max(8, y - h - 12)}px`;
     };
-    for (const area of [$('#simulador')]) {
+    ligarTip = (area) => {
       area.addEventListener('pointermove', (e) => { const a = e.target.closest('[data-tip]'); if (a) mostrar(a, e.clientX, e.clientY); else tip.hidden = true; });
       area.addEventListener('pointerleave', () => { tip.hidden = true; });
       area.addEventListener('focusin', (e) => { const a = e.target.closest('[data-tip]'); if (a) { const r = a.getBoundingClientRect(); mostrar(a, r.left + r.width / 2, r.top); } });
       area.addEventListener('focusout', () => { tip.hidden = true; });
-    }
+    };
+    ligarTip($('#simulador'));
     const raiz = $('#dashboard');
     raiz.addEventListener('pointermove', (e) => { const a = e.target.closest('[data-tip]'); if (a) mostrar(a, e.clientX, e.clientY); else tip.hidden = true; });
     raiz.addEventListener('pointerleave', () => { tip.hidden = true; });
@@ -2410,7 +2415,7 @@
   });
 
   document.addEventListener('keydown', (e) => {
-    if (!eu || e.ctrlKey || e.metaKey || e.altKey || $('.fundo-modal')) return;
+    if (!eu || modoEmpresa || e.ctrlKey || e.metaKey || e.altKey || $('.fundo-modal')) return;
     if (e.target.closest('input, select, textarea, [contenteditable]')) return;
     if (e.key === 'n' || e.key === 'N') { e.preventDefault(); abrirFormulario(); }
     else if (e.key === 'ArrowLeft' && ['mes', 'dashboard', 'ano'].includes(est.secao)) mover(-1);
@@ -2434,8 +2439,16 @@
       return;
     }
     $('#carregando').remove();
-    ligarPlanos();
     ligarTooltipDashboard();
+    if (eu.empresa) {
+      modoEmpresa = true;
+      try {
+        await window.VerticeEmpresa.iniciar({ $, $$, esc, ic, hidratar, api, toast, abrirModal, confirmar, baixar, ligarTip, formatarTelefone, dataHora, iniciais }, eu);
+      } catch (e) { toast(e.message, { erro: true, tempo: 10000 }); }
+      if (eu.trocarSenha) trocarSenha({ obrigatoria: true });
+      return;
+    }
+    ligarPlanos();
     ligarSimulador();
     if (eu.perfil === 'admin') {
       ligarConfigAssinaturas();

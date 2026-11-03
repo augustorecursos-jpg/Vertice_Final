@@ -37,6 +37,18 @@ Regras de proteção:
 - Escritas na API só aceitam JSON (proteção contra CSRF).
 - Cabeçalhos de segurança, com CSP restritiva.
 
+## Vértice Empresas
+
+Conta de empresa com gestão financeira gerencial. **Quem cria e controla empresas, usuários, papéis e acessos é só a AR Consultoria**, no menu **Empresas e usuários**.
+
+- **Painel da AR:** empresas clientes, usuários de empresas, receita mensal equivalente e o que precisa de atenção. Para cada empresa: plano (Essencial até 3 usuários, Gestão até 8, Grupo até 20), período e valor, assinatura, renovação com escolha do período, aviso por WhatsApp/e-mail, bloqueio da empresa inteira (derruba todos os usuários na hora) e exclusão.
+- **Usuários da empresa:** criados pela AR com papel e centros de custo. Usuários de **Leitura** não contam no limite do plano. Troca de papel, redefinição de senha, bloqueio e exclusão ficam na atividade recente.
+- **Papéis:** **Dono** (tudo, inclusive aprovar o orçamento), **Financeiro** (lança, edita orçamento e plano de contas, exporta), **Gestor** (vê e lança só nos centros de custo dele) e **Leitura** (consulta e exporta). As permissões são verificadas no servidor.
+- **Solicitações:** o Dono vê a equipe em modo consulta e usa **Solicitar alteração à AR**, pelo WhatsApp da AR (configurado em Planos, preços e avisos) ou direto no painel da AR.
+- **Telas da empresa:** Painel do mês; Contas a pagar e receber (única, mensal ou parcelada, com cliente/fornecedor, conta e centro de custo); Orçamento anual em grade tipo planilha, por centro de custo, com cópia do ano anterior + reajuste, distribuição do valor anual e **versões** (Financeiro propõe, Dono aprova); Orçado × realizado por mês, trimestre ou acumulado, com farol (dentro, atenção, estourado) e maiores desvios; DRE gerencial; Fluxo de caixa com saldo acumulado; Plano de contas e centros de custo; Equipe e plano.
+- **Exportação:** Excel (CSV) e PDF (impressão) em contas, orçamento, orçado × realizado, DRE e fluxo de caixa.
+- A assinatura é da empresa: começa no primeiro acesso de qualquer usuário dela.
+
 ## O app
 
 - **Lançamentos:** cada lançamento tem vencimento, e os atrasados e próximos de vencer ficam destacados. Tem recorrência mensal e parcelamento (o valor é guardado em centavos, então as parcelas fecham o total exato). Séries são editadas ou excluídas só no mês, dali em diante ou inteiras.
@@ -95,13 +107,16 @@ Variáveis de ambiente:
 
 ```
 server.js            API: login, sessão, dados do usuário, administração de contas
-db.js                SQLite (usuarios, carteiras, auditoria) e senhas
+empresas.js          API do Vértice Empresas e administração central das empresas
+db.js                SQLite (usuarios, carteiras, empresas, auditoria...) e senhas
 public/
   index.html         App (Mês, Visão anual, Minha conta, Usuários)
   entrar.html        Tela de login
   css/estilo.css     Identidade visual AR Consultoria (variáveis em :root)
   js/nucleo.js       Regras de negócio, usadas no navegador e no servidor
-  js/app.js          Interface
+  js/nucleo-empresa.js  Regras do Vértice Empresas (DRE, orçado × realizado, fluxo de caixa)
+  js/app.js          Interface (pessoa física e administração)
+  js/empresa.js      Interface da empresa
   js/entrar.js       Login
   sw.js              Cache dos arquivos estáticos
 test/                Testes (node --test)
