@@ -149,7 +149,7 @@
   const agora = new Date();
   const est = {
     secao: 'mes', ano: agora.getFullYear(), mes: agora.getMonth(),
-    filtro: 'todos', filtroProvisao: null, filtroCartao: null, painelAno: false, painelCats: new Set(), painelAbertas: new Set(), painelAba: 'resumo', gastosAbertos: new Set(), sim: { base: 'mes', ativo: null, cen: { valores: {}, tipos: {} } }, simTiposAberto: false, empresaSel: null, busca: '', ordem: prefs.ordem, abertas: new Set(),
+    filtro: 'todos', filtroProvisao: null, filtroCartao: null, painelAno: false, painelCats: new Set(), painelAbertas: new Set(), painelAba: 'resumo', gastosAbertos: new Set(), comprasAbertas: new Set(), sim: { base: 'mes', ativo: null, cen: { valores: {}, tipos: {} } }, simTiposAberto: false, empresaSel: null, busca: '', ordem: prefs.ordem, abertas: new Set(),
   };
 
   // ---------- toast ----------
@@ -271,7 +271,105 @@
     }
     f('f-tipos').addEventListener('change', () => { tipoManual = true; f('dica-tipo').textContent = ''; });
     f('f-desc').addEventListener('input', sugerirTipo);
-    function mostrarTipo() { f('bloco-tipo').hidden = CAT[$('input[name=cat]:checked', modal)?.value]?.tipo !== 'saida'; }
+    function mostrarTipo() { f('bloco-tipo').hidden = CAT[$('input[name=cat]:checked', modal)?.value]?.tipo !== 'saida' || detalhando(); }
+    const val = (nome) => $(`input[name=${nome}]:checked`, modal)?.value;
+    // ---------- compras da fatura (só cartão): cada compra com valor e tipo; o valor da fatura é a soma ----------
+    let compras = (l.compras || []).map((c) => ({ ...c, tipoManual: true }));
+    let detalhar = compras.length > 0;
+    let valorManual = !!existente && detalhar && l.centavos > N.somaCompras(l);
+    let notaFixas = '';
+    const opcoesTipo = (sel) => `<option value="">Sem tipo</option>${N.TIPOS_GASTO.map((t) => `<option value="${t.id}" ${t.id === sel ? 'selected' : ''}>${t.emoji} ${esc(t.nome)}</option>`).join('')}`;
+    const somaCompras = () => compras.reduce((a, c) => a + (c.centavos > 0 ? c.centavos : 0), 0);
+    const podeDetalhar = () => $('input[name=cat]:checked', modal)?.value === 'cartao' && (existente || val('rec') !== 'parcelada');
+    const detalhando = () => detalhar && podeDetalhar();
+    function desenharCompras(focar = null) {
+      const bloco = f('bloco-compras');
+      bloco.hidden = !podeDetalhar();
+      if (bloco.hidden) { f('dica-valor').textContent = ''; return; }
+      const lidas = N.lerComprasDoTexto(f('f-obs').value).compras;
+      bloco.innerHTML = `<label class="fat-tog"><span><b>Detalhar as compras da fatura</b><small>Cada compra tem valor e tipo de gasto. O valor da fatura é a soma.</small></span>
+          <input type="checkbox" class="chave-sw" id="fat-detalhar" ${detalhar ? 'checked' : ''}></label>
+        ${detalhar ? `${lidas.length ? `<div class="fat-import">${ic('info')}<span>${lidas.length === 1 ? 'Encontramos 1 compra escrita' : `Encontramos ${lidas.length} compras escritas`} nas observações.</span><button type="button" class="btn sec peq" data-fat="importar">Transformar em compras</button></div>` : ''}
+          ${notaFixas ? `<p class="dica">${ic('repetir')} ${esc(notaFixas)}</p>` : ''}
+          <div class="fat-wrap"><table class="fat-tab"><thead><tr><th scope="col">Compra</th><th scope="col">Valor</th><th scope="col">Tipo de gasto</th><th scope="col">Repete</th><th scope="col"><span class="sr">Remover</span></th></tr></thead><tbody>
+          ${compras.map((c, i) => `<tr data-i="${i}"><td><input type="text" maxlength="80" data-fc="desc" value="${esc(c.desc)}" placeholder="Ex.: iFood" aria-label="Compra ${i + 1}"></td>
+            <td><div class="campo-valor"><span>R$</span><input type="text" inputmode="decimal" data-fc="valor" value="${c.centavos > 0 ? N.valorParaCampo(c.centavos) : ''}" placeholder="0,00" aria-label="Valor da compra ${i + 1}"></div></td>
+            <td><select data-fc="tipo" aria-label="Tipo de gasto da compra ${i + 1}">${opcoesTipo(c.tipoGasto)}</select></td>
+            <td><label class="fat-fixo" title="Volta sozinha na próxima fatura deste cartão"><input type="checkbox" data-fc="fixa" ${c.fixa ? 'checked' : ''}> todo mês</label></td>
+            <td><button type="button" class="btn fantasma icone peq" data-fat="remover" aria-label="Remover compra ${i + 1}" title="Remover">${ic('x')}</button></td></tr>`).join('')}
+          </tbody></table></div>
+          <div class="fat-rod"><button type="button" class="btn fantasma peq" data-fat="adicionar">${ic('mais')} Adicionar compra</button><span id="fat-total" aria-live="polite"></span></div>` : ''}`;
+      atualizarTotais();
+      if (focar != null) $(`tr[data-i="${focar}"] [data-fc=desc]`, bloco)?.focus();
+    }
+    function atualizarTotais() {
+      if (!detalhando()) { f('dica-valor').textContent = ''; return; }
+      const soma = somaCompras();
+      if (!valorManual) f('f-valor').value = soma ? N.valorParaCampo(soma) : '';
+      const v = N.lerValor(f('f-valor').value);
+      const resto = v > 0 ? v - soma : 0;
+      const n = compras.filter((c) => c.desc.trim() || c.centavos > 0).length;
+      const tot = $('#fat-total', modal);
+      if (tot) tot.innerHTML = `${n} ${n === 1 ? 'compra' : 'compras'} · <b>${moeda(soma)}</b>${resto > 0 ? ` · não detalhado <b>${moeda(resto)}</b>` : ''}`;
+      f('dica-valor').innerHTML = resto < 0 ? '<span class="txt-erro">Menor que a soma das compras</span>'
+        : resto > 0 ? `Valor da fatura · ${moeda(resto)} não detalhado` : soma ? `${ic('check')} Soma das compras` : '';
+    }
+    function ligarDetalhe(ligar) {
+      detalhar = ligar;
+      if (ligar && !compras.length) {
+        const d = N.lerIso(f('f-data').value) || { ano: est.ano, mes: est.mes };
+        const fixas = N.comprasFixasAnteriores(dados.lancamentos, cartaoSel.ler(), d.ano, d.mes, existente?.id);
+        compras = fixas.compras.map((c) => ({ ...c, tipoManual: true }));
+        notaFixas = fixas.compras.length ? `${fixas.compras.length} ${fixas.compras.length === 1 ? 'compra fixa trazida' : 'compras fixas trazidas'} da fatura de ${MESES[fixas.de.mes].toLowerCase()}.` : '';
+        valorManual = N.lerValor(f('f-valor').value) > 0;
+        compras.push({ desc: '', centavos: 0, tipoGasto: null, fixa: false });
+      }
+      mostrarTipo();
+      desenharCompras(ligar ? compras.findIndex((c) => !c.desc) : null);
+    }
+    f('bloco-compras').addEventListener('change', (e) => {
+      if (e.target.id === 'fat-detalhar') return ligarDetalhe(e.target.checked);
+      const tr = e.target.closest('tr[data-i]');
+      if (!tr) return;
+      const c = compras[+tr.dataset.i];
+      if (e.target.dataset.fc === 'tipo') { c.tipoGasto = e.target.value || null; c.tipoManual = true; }
+      if (e.target.dataset.fc === 'fixa') c.fixa = e.target.checked;
+      if (e.target.dataset.fc === 'valor' && c.centavos > 0) e.target.value = N.valorParaCampo(c.centavos);
+    });
+    f('bloco-compras').addEventListener('input', (e) => {
+      const tr = e.target.closest('tr[data-i]');
+      if (!tr) return;
+      const c = compras[+tr.dataset.i];
+      if (e.target.dataset.fc === 'desc') {
+        c.desc = e.target.value;
+        if (!c.tipoManual) { c.tipoGasto = N.sugerirTipoGasto(c.desc, dados.lancamentos); $('[data-fc=tipo]', tr).value = c.tipoGasto || ''; }
+      }
+      if (e.target.dataset.fc === 'valor') { const v = N.lerValor(e.target.value); c.centavos = v > 0 ? v : 0; atualizarTotais(); }
+    });
+    f('bloco-compras').addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' || !e.target.closest('tr[data-i]') || e.target.tagName === 'SELECT') return;
+      e.preventDefault(); // Enter vai para a próxima compra (ou cria uma)
+      const i = +e.target.closest('tr').dataset.i;
+      if (i === compras.length - 1) { compras.push({ desc: '', centavos: 0, tipoGasto: null, fixa: false }); desenharCompras(i + 1); }
+      else $(`tr[data-i="${i + 1}"] [data-fc=desc]`, modal)?.focus();
+    });
+    f('bloco-compras').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-fat]');
+      if (!b) return;
+      if (b.dataset.fat === 'adicionar') { compras.push({ desc: '', centavos: 0, tipoGasto: null, fixa: false }); return desenharCompras(compras.length - 1); }
+      if (b.dataset.fat === 'remover') { compras.splice(+b.closest('tr').dataset.i, 1); if (!compras.length) compras.push({ desc: '', centavos: 0, tipoGasto: null, fixa: false }); return desenharCompras(); }
+      if (b.dataset.fat === 'importar') {
+        const { compras: lidas, sobra } = N.lerComprasDoTexto(f('f-obs').value);
+        compras = [...compras.filter((c) => c.desc.trim() || c.centavos > 0),
+          ...lidas.map((c) => ({ ...c, tipoGasto: N.sugerirTipoGasto(c.desc, dados.lancamentos), tipoManual: false }))];
+        f('f-obs').value = sobra; contarObs();
+        desenharCompras();
+        toast(`${lidas.length} ${lidas.length === 1 ? 'compra trazida' : 'compras trazidas'} das observações. Confira os tipos.`);
+      }
+    });
+    f('f-valor').addEventListener('input', () => { if (detalhando()) { valorManual = !!f('f-valor').value.trim(); atualizarTotais(); } });
+    f('f-obs').addEventListener('change', () => { if (detalhando()) desenharCompras(); });
+
     function mostrarCartao() {
       mostrarTipo();
       const ehCartao = $('input[name=cat]:checked', modal)?.value === 'cartao';
@@ -295,15 +393,20 @@
       f('bloco-prov').hidden = tipo === 'entrada' || (!grupos.size);
     }
     f('f-prov').addEventListener('change', () => { provEscolhida = f('f-prov').value; });
-    modal.addEventListener('change', (e) => { if (e.target.name === 'cat' || e.target.id === 'f-data') { mostrarCartao(); opcoesProvisao(); } });
+    modal.addEventListener('change', (e) => {
+      if (e.target.name === 'cat' || e.target.id === 'f-data') { mostrarCartao(); opcoesProvisao(); }
+      if (e.target.name === 'cat' || e.target.name === 'rec') { desenharCompras(); mostrarTipo(); }
+    });
     mostrarCartao();
     opcoesProvisao();
-    const contarObs = () => {
+    function contarObs() {
       const n = f('f-obs').value.length;
       f('c-obs').textContent = n > N.MAX_OBS * 0.8 ? `${n}/${N.MAX_OBS}` : '';
-    };
+    }
     f('f-obs').addEventListener('input', contarObs);
     contarObs();
+    desenharCompras();
+    mostrarTipo();
 
     if (existente) {
       f('titulo-modal').textContent = 'Editar lançamento';
@@ -316,7 +419,6 @@
       }
     }
 
-    const val = (nome) => $(`input[name=${nome}]:checked`, modal)?.value;
     function atualizarSerie() {
       if (existente) return;
       const rec = val('rec');
@@ -370,6 +472,20 @@
       }
       const centavos = N.lerValor(f('f-valor').value);
       const data = N.lerIso(f('f-data').value);
+      // Compras da fatura: linhas vazias são ignoradas; linhas pela metade precisam ser completadas.
+      let comprasFinal = [];
+      if (detalhando()) {
+        const linhas = compras.filter((c) => c.desc.trim() || c.centavos > 0);
+        const ruim = linhas.findIndex((c) => !c.desc.trim() || !(c.centavos > 0));
+        if (ruim >= 0) {
+          $(`tr[data-i="${compras.indexOf(linhas[ruim])}"] [data-fc=${linhas[ruim].desc.trim() ? 'valor' : 'desc'}]`, modal)?.focus();
+          return toast(`Complete a compra ${ruim + 1} (descrição e valor) ou remova.`, { erro: true });
+        }
+        comprasFinal = linhas.map((c) => ({ id: c.id, desc: c.desc.trim(), centavos: c.centavos, tipoGasto: c.tipoGasto || null, fixa: !!c.fixa }));
+        if (comprasFinal.length && centavos > 0 && centavos < comprasFinal.reduce((a, c) => a + c.centavos, 0)) {
+          return erro('valor', 'O valor da fatura não pode ser menor que a soma das compras.') || f('f-valor').focus();
+        }
+      }
       const okDesc = erro('desc', desc ? '' : 'Informe uma descrição.');
       const okValor = erro('valor', centavos > 0 ? '' : 'Informe um valor maior que zero, como 1.250,90.');
       const okData = erro('data', data ? '' : 'Escolha a data de vencimento.');
@@ -382,7 +498,7 @@
       if (existente) {
         const escopo = await escolherEscopo(existente, 'Editar');
         if (!escopo) return;
-        dados.lancamentos = N.editar(dados.lancamentos, existente.id, { desc, obs, provisao, cartao, tipoGasto, centavos, categoria, ...data }, escopo);
+        dados.lancamentos = N.editar(dados.lancamentos, existente.id, { desc, obs: f('f-obs').value.trim(), provisao, cartao, tipoGasto, centavos, categoria, compras: comprasFinal, ...data }, escopo);
         fechar(); salvar();
         toast('Lançamento atualizado.');
         return;
@@ -391,7 +507,7 @@
       const rec = val('rec');
       const qtd = Math.floor(+f('f-qtd').value);
       if (rec !== 'unica' && !(qtd >= 2 && qtd <= 120)) { f('f-qtd').focus(); return toast('A quantidade deve ficar entre 2 e 120.', { erro: true }); }
-      const novos = N.gerar({ desc, obs, provisao, cartao, tipoGasto, centavos, categoria, ...data, recorrencia: rec, quantidade: qtd, modoValor: val('modo') });
+      const novos = N.gerar({ desc, obs: f('f-obs').value.trim(), provisao, cartao, tipoGasto, centavos, categoria, compras: comprasFinal, ...data, recorrencia: rec, quantidade: qtd, modoValor: val('modo') });
       dados.lancamentos.push(...novos);
       fechar(); salvar();
       const msg = novos.length > 1 ? `${novos.length} lançamentos criados.` : 'Lançamento criado.';
@@ -562,7 +678,9 @@
       `<button type="button" data-filtro-cartao="${esc(k)}" class="${est.filtroCartao === k ? 'ativo' : ''}" aria-pressed="${est.filtroCartao === k}">${esc(c.nome)} <b>${moeda(c.total)}</b></button>`).join('')}` : '';
     if (est.filtroCartao && est.filtro !== 'atrasados') itens = itens.filter((l) => l.categoria === 'cartao' && N.normalizar(l.cartao || 'Sem cartão definido') === est.filtroCartao);
     const q = N.normalizar(est.busca.trim());
-    if (q) itens = itens.filter((l) => N.normalizar(`${l.desc} ${l.obs || ''} ${CAT[l.categoria].nome} ${l.cartao || ''} ${nomeProvisao(l.provisao) || ''} ${N.TIPO[l.tipoGasto]?.nome || ''}`).includes(q));
+    if (q) itens = itens.filter((l) => N.normalizar(`${l.desc} ${l.obs || ''} ${CAT[l.categoria].nome} ${l.cartao || ''} ${nomeProvisao(l.provisao) || ''} ${N.TIPO[l.tipoGasto]?.nome || ''} ${(l.compras || []).map((c) => `${c.desc} ${N.TIPO[c.tipoGasto]?.nome || ''}`).join(' ')}`).includes(q));
+    // Na busca, faturas que casam por uma compra já aparecem abertas.
+    if (q) for (const l of itens) if ((l.compras || []).some((c) => N.normalizar(c.desc).includes(q))) est.comprasAbertas.add(l.id);
     const ord = {
       venc: (a, b) => N.dataDe(a) - N.dataDe(b) || a.pago - b.pago || b.centavos - a.centavos,
       maior: (a, b) => b.centavos - a.centavos,
@@ -608,13 +726,13 @@
           aria-label="${l.pago ? 'Desmarcar' : 'Marcar como ' + c.feito.toLowerCase()}: ${esc(l.desc)}" title="${l.pago ? 'Desmarcar' : 'Marcar como ' + c.feito.toLowerCase()}">${ic('check')}</button>
         <div class="data" aria-hidden="true"><b>${d.getDate()}</b><small>${MESES_CURTOS[d.getMonth()]}${outroMes ? ' ' + String(d.getFullYear()).slice(2) : ''}</small></div>
         <div class="desc"><b title="${esc(N.titulo(l))}">${esc(l.desc)}</b>
-          <div class="tags"><span class="tag quando neutra">${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span><span class="tag cat" data-cat="${l.categoria}">${esc(nomeCategoria(l.categoria, l.cartao))}</span>${l.tipoGasto && N.TIPO[l.tipoGasto] ? `<span class="tag neutra">${esc(nomeTipo(l.tipoGasto))}</span>` : ''}${serie}${l.provisao && nomeProvisao(l.provisao) ? `<span class="tag prov-tag" title="Provisão">${ic('alvo')} ${esc(nomeProvisao(l.provisao))}</span>` : ''}${situ}</div>${l.obs ? `<div class="obs"><button type="button" data-acao="obs" aria-expanded="false" title="${esc(l.obs)}">${ic('nota')}<span>${esc(l.obs)}</span></button></div>` : ''}</div>
+          <div class="tags"><span class="tag quando neutra">${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span><span class="tag cat" data-cat="${l.categoria}">${esc(nomeCategoria(l.categoria, l.cartao))}</span>${l.tipoGasto && N.TIPO[l.tipoGasto] ? `<span class="tag neutra">${esc(nomeTipo(l.tipoGasto))}</span>` : ''}${l.compras?.length ? `<button type="button" class="tag info tag-compras" data-acao="compras" data-id="${esc(l.id)}" aria-expanded="${est.comprasAbertas.has(l.id)}">🧾 ${l.compras.length} ${l.compras.length === 1 ? 'compra' : 'compras'} ${ic(est.comprasAbertas.has(l.id) ? 'desce2' : 'dir')}</button>` : ''}${serie}${l.provisao && nomeProvisao(l.provisao) ? `<span class="tag prov-tag" title="Provisão">${ic('alvo')} ${esc(nomeProvisao(l.provisao))}</span>` : ''}${situ}</div>${l.obs ? `<div class="obs"><button type="button" data-acao="obs" aria-expanded="false" title="${esc(l.obs)}">${ic('nota')}<span>${esc(l.obs)}</span></button></div>` : ''}</div>
         <div class="valor">${c.tipo === 'entrada' ? '+ ' : ''}${moeda(l.centavos)}</div>
         <div class="acoes">
           <button type="button" class="btn fantasma icone peq" data-acao="editar" data-id="${esc(l.id)}" aria-label="Editar ${esc(l.desc)}" title="Editar">${ic('editar')}</button>
           <button type="button" class="btn fantasma icone peq apagar" data-acao="excluir" data-id="${esc(l.id)}" aria-label="Excluir ${esc(l.desc)}" title="Excluir">${ic('lixo')}</button>
         </div>
-      </div>`;
+      </div>${l.compras?.length && est.comprasAbertas.has(l.id) ? htmlComprasFatura(l) : ''}`;
     }).join('');
 
     const ent = itens.filter((l) => tipo(l) === 'entrada').reduce((a, l) => a + l.centavos, 0);
@@ -717,6 +835,13 @@
     $('#info-backup').textContent = `${n} ${n === 1 ? 'lançamento salvo' : 'lançamentos salvos'} na sua conta. Baixe uma cópia quando quiser guardar ou levar para uma planilha.`;
   }
 
+  function htmlComprasFatura(l) {
+    const resto = l.centavos - N.somaCompras(l);
+    return `<div class="itens-fat" aria-label="Compras da fatura ${esc(l.desc)}">${l.compras.map((c) => `<div><span>${esc(c.desc)}${c.fixa ? ' <small class="suave">· todo mês</small>' : ''}</span>
+      <span class="tg">${c.tipoGasto ? esc(nomeTipo(c.tipoGasto)) : 'Sem tipo'}</span><span class="n">${moeda(c.centavos)}</span></div>`).join('')}
+      ${resto > 0 ? `<div class="resto"><span>Não detalhado</span><span class="tg"></span><span class="n">${moeda(resto)}</span></div>` : ''}</div>`;
+  }
+
   // ---------- onde estou gastando ----------
   const nomeTipo = (id) => (N.TIPO[id] ? `${N.TIPO[id].emoji} ${N.TIPO[id].nome}` : '');
   function htmlGastos(mes, filtroCats) {
@@ -726,15 +851,15 @@
     const tiles = [
       `<div class="kpi dash-kpi"><span class="rot">Maior tipo de gasto</span><div class="val">${g.maior ? esc(nomeTipo(g.maior.id)) : '–'}</div>
         <div class="det">${g.maior ? `${moeda(g.maior.total)} · ${g.maior.pct}% das despesas` : 'Classifique os lançamentos para ver'}</div></div>`,
-      `<div class="kpi ${g.semTipo.qtd ? 'vermelho' : 'verde'} dash-kpi"><span class="rot">Lançamentos sem tipo</span><div class="val">${g.semTipo.qtd}</div>
-        <div class="det">${g.semTipo.qtd ? `${moeda(g.semTipo.total)} · <button type="button" class="link-acao" data-classificar>classificar agora</button>` : 'Tudo classificado'}</div></div>`,
+      `<div class="kpi ${g.semTipo.qtd ? 'vermelho' : 'verde'} dash-kpi"><span class="rot">Gastos sem tipo</span><div class="val">${g.semTipo.qtd}</div>
+        <div class="det">${g.semTipo.qtd ? `${moeda(g.semTipo.total)}${g.semTipo.ids.length ? ` · <button type="button" class="link-acao" data-classificar>classificar agora</button>` : ''}${g.semTipo.qtd > g.semTipo.ids.length ? ` · ${g.semTipo.qtd - g.semTipo.ids.length} dentro de faturas de cartão (edite a fatura)` : ''}` : 'Tudo classificado'}</div></div>`,
       `<div class="kpi indigo dash-kpi"><span class="rot">Parcelas já comprometidas</span><div class="val">${moeda(g.parcelas.proximoMes)}</div>
         <div class="det">${g.parcelas.ate ? `no próximo mês · última parcela em ${mesNome(g.parcelas.ate.ano, g.parcelas.ate.mes)}` : 'Nenhuma parcela futura'}</div></div>`,
     ];
     const max = Math.max(1, ...g.tipos.map((t) => t.total));
     const barras = g.tipos.length ? g.tipos.map((t) => {
       const aberto = est.gastosAbertos.has(t.id);
-      const sub = aberto ? `<div class="sub-tipo">${t.descricoes.slice(0, 8).map((d) => `<div><b>${esc(d.desc)}</b><span>${d.qtd}×</span><span>${moeda(d.total)}</span></div>`).join('')}
+      const sub = aberto ? `<div class="sub-tipo">${t.descricoes.slice(0, 8).map((d) => `<div><b>${esc(d.desc)}${d.faturas?.length ? ` <small class="suave">· compra da fatura ${esc(d.faturas.join(', '))}</small>` : ''}</b><span>${d.qtd}×</span><span>${moeda(d.total)}</span></div>`).join('')}
         ${t.descricoes.length > 8 ? `<div><b>+ ${t.descricoes.length - 8} outras descrições</b><span></span><span>${moeda(t.descricoes.slice(8).reduce((a, d) => a + d.total, 0))}</span></div>` : ''}</div>` : '';
       return `<div class="barra-tipo ${aberto ? 'aberta' : ''}">
         <button type="button" class="nome" data-gtipo="${t.id}" aria-expanded="${aberto}">${ic(aberto ? 'desce2' : 'dir')}<span class="emoji">${t.emoji}</span> <b>${esc(t.nome)}</b></button>
@@ -2376,6 +2501,7 @@
     const { acao, id } = alvo.dataset;
     if (acao === 'obs') { const o = alvo.closest('.obs'); alvo.setAttribute('aria-expanded', String(o.classList.toggle('aberta'))); return; }
     if (acao === 'marcar') return alternarPago(id);
+    if (acao === 'compras') { est.comprasAbertas.has(id) ? est.comprasAbertas.delete(id) : est.comprasAbertas.add(id); renderMes(); return $(`[data-acao="compras"][data-id="${CSS.escape(id)}"]`)?.focus(); }
     if (acao === 'editar') { const l = dados.lancamentos.find((x) => x.id === id); return l && abrirFormulario(l); }
     if (acao === 'excluir') return excluir(id);
   });

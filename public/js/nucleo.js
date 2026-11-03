@@ -44,16 +44,74 @@
     ['moradia', ['aluguel', 'condominio', 'luz', 'energia', 'enel', 'cemig', 'agua', 'sabesp', 'gas ', 'conta de gas', 'internet', 'iptu', 'reforma', 'manutencao', 'diarista']],
     ['educacao', ['escola', 'faculdade', 'curso', 'mensalidade escolar', 'livro', 'udemy', 'alura', 'material escolar']],
     ['lazer', ['cinema', 'show', 'ingresso', 'teatro', 'parque', 'jogo', 'steam', 'playstation', 'xbox', 'festa', 'balada']],
-    ['assinaturas', ['netflix', 'spotify', 'amazon prime', 'prime video', 'disney', 'hbo', 'max ', 'globoplay', 'deezer', 'youtube', 'icloud', 'google one', 'apple', 'assinatura', 'streaming', 'paramount']],
+    ['assinaturas', ['netflix', 'spotify', 'amazon prime', 'prime video', 'disney', 'hbo', 'max ', 'globoplay', 'deezer', 'youtube', 'icloud', 'google one', 'apple', 'assinatura', 'streaming', 'paramount', 'claude', 'chatgpt', 'openai', 'gemini', 'copilot', 'perplexity', 'midjourney', 'canva', 'adobe', 'microsoft 365', 'office 365', 'dropbox', 'notion', 'duolingo']],
     ['compras', ['magalu', 'magazine', 'amazon', 'mercado livre', 'shopee', 'shein', 'americanas', 'casas bahia', 'renner', 'riachuelo', 'c&a', 'loja', 'roupa', 'calcado', 'notebook', 'celular', 'eletro']],
     ['viagem', ['hotel', 'pousada', 'airbnb', 'booking', 'passagem', 'latam', 'gol ', 'azul ', 'smiles', 'viagem', 'decolar', 'aluguel de carro']],
     ['pets', ['pet ', 'pet shop', 'petshop', 'petz', 'cobasi', 'veterin', 'racao', 'banho e tosa']],
   ];
+  // ---------- compras da fatura do cartão ----------
+  // Um lançamento de cartão pode detalhar as compras da fatura. O valor do lançamento é o da fatura;
+  // o que passar da soma das compras é a parte "não detalhada".
+  const MAX_COMPRAS = 200;
+  function limparCompras(categoria, x) {
+    if (categoria !== 'cartao' || !Array.isArray(x)) return [];
+    return x.slice(0, MAX_COMPRAS).map((c) => {
+      const centavos = Number(c?.centavos);
+      const desc = String(c?.desc ?? '').replace(/\s+/g, ' ').trim().slice(0, 80);
+      if (!desc || !Number.isInteger(centavos) || centavos <= 0 || centavos > 1e13) return null;
+      return { id: String(c.id || novoId()).slice(0, 80), desc, centavos, tipoGasto: TIPO[c.tipoGasto] ? c.tipoGasto : null, fixa: !!c.fixa };
+    }).filter(Boolean);
+  }
+  const somaCompras = (l) => (l.compras || []).reduce((a, c) => a + c.centavos, 0);
+
+  /** Partes de um gasto para a análise por tipo: as compras da fatura e o resto não detalhado, ou o lançamento inteiro. */
+  function partesGasto(l) {
+    if (!l.compras || !l.compras.length) return [{ l, desc: l.desc, centavos: l.centavos, tipoGasto: l.tipoGasto || null, compra: null, resto: false }];
+    const partes = l.compras.map((c) => ({ l, desc: c.desc, centavos: c.centavos, tipoGasto: c.tipoGasto, compra: c, resto: false }));
+    const resto = l.centavos - somaCompras(l);
+    if (resto > 0) partes.push({ l, desc: `${l.desc} (não detalhado)`, centavos: resto, tipoGasto: null, compra: null, resto: true });
+    return partes;
+  }
+
+  /** Compras marcadas "todo mês" na fatura mais recente do mesmo cartão antes de (ano, mes). */
+  function comprasFixasAnteriores(lista, cartao, ano, mes, ignorarId = null) {
+    if (!cartao) return { compras: [], de: null };
+    const k = chaveMes(ano, mes);
+    const anterior = lista.filter((l) => l.id !== ignorarId && l.categoria === 'cartao' && mesmoCartao(l.cartao, cartao) && chaveMes(l.ano, l.mes) < k
+      && (l.compras || []).some((c) => c.fixa)).sort((a, b) => chaveMes(b.ano, b.mes) - chaveMes(a.ano, a.mes))[0];
+    if (!anterior) return { compras: [], de: null };
+    return { compras: anterior.compras.filter((c) => c.fixa).map((c) => ({ ...c, id: novoId() })), de: { ano: anterior.ano, mes: anterior.mes } };
+  }
+
+  /**
+   * Lê compras escritas nas observações, uma por linha: "R$ 110,00 - Claude IA" ou "Claude IA - R$ 110,00".
+   * Linhas de título terminadas em ":" ("Fixos:") marcam as compras seguintes como fixas quando o título fala em fixo/mensal.
+   * Devolve as compras e o texto que sobra.
+   */
+  function lerComprasDoTexto(texto) {
+    const compras = [], sobra = [];
+    let fixas = false;
+    for (const linha of String(texto || '').split(/\r?\n/)) {
+      const t = linha.trim();
+      if (!t) { sobra.push(linha); continue; }
+      const titulo = /^([^\d]{1,40}):\s*$/.exec(t);
+      if (titulo) { fixas = /fix|mensa|recorr|todo m/i.test(titulo[1]); continue; }
+      const m = /^(?:[-•*]\s*)?R\$\s*([\d.,]+)\s*[-–—:]\s*(.+)$/i.exec(t) || /^(?:[-•*]\s*)?(.+?)\s*[-–—:]\s*R\$\s*([\d.,]+)$/i.exec(t);
+      if (!m) { sobra.push(linha); continue; }
+      const [valorTxt, desc] = /^R\$/i.test(t.replace(/^[-•*]\s*/, '')) ? [m[1], m[2]] : [m[2], m[1]];
+      const centavos = lerValor(valorTxt);
+      if (!(centavos > 0) || !desc.trim()) { sobra.push(linha); continue; }
+      compras.push({ desc: desc.trim().slice(0, 80), centavos, fixa: fixas });
+    }
+    return { compras, sobra: sobra.join('\n').replace(/\n{3,}/g, '\n\n').trim() };
+  }
+
   /** Sugere o tipo de gasto: primeiro o que a pessoa já usou para a mesma descrição, depois as palavras-chave. */
   function sugerirTipoGasto(desc, lista = []) {
     const n = normalizarTexto(desc);
     if (!n) return null;
-    const anterior = lista.filter((l) => l.tipoGasto && normalizarTexto(l.desc) === n).sort((a, b) => (b.criadoEm || 0) - (a.criadoEm || 0))[0];
+    const anterior = lista.flatMap((l) => (l.compras && l.compras.length ? l.compras.map((c) => ({ ...c, criadoEm: l.criadoEm })) : [l]))
+      .filter((l) => l.tipoGasto && normalizarTexto(l.desc) === n).sort((a, b) => (b.criadoEm || 0) - (a.criadoEm || 0))[0];
     if (anterior) return anterior.tipoGasto;
     const alvo = ` ${n} `;
     for (const [tipo, palavras] of PALAVRAS_TIPO) {
@@ -159,8 +217,11 @@
       tipoGasto: limparTipoGasto(f.categoria, f.tipoGasto),
       provisao: f.provisao || null, pago: false, criadoEm: Date.now(),
     };
+    // Compras detalhadas só em fatura de cartão; numa série mensal, os meses seguintes levam as compras fixas.
+    const compras = f.recorrencia === 'parcelada' ? [] : limparCompras(f.categoria, f.compras);
+    const comCompras = (o, lista) => (lista.length ? { ...o, compras: lista, centavos: Math.max(o.centavos, lista.reduce((a, c) => a + c.centavos, 0)) } : o);
     if (f.recorrencia === 'unica' || !f.recorrencia) {
-      return [{ ...base, id: gerarId(), grupo: null, parcela: null, centavos: f.centavos, ano: f.ano, mes: f.mes, dia: f.dia }];
+      return [comCompras({ ...base, id: gerarId(), grupo: null, parcela: null, centavos: f.centavos, ano: f.ano, mes: f.mes, dia: f.dia }, compras)];
     }
     const n = Math.max(2, Math.min(120, Math.floor(f.quantidade) || 2));
     const grupo = gerarId();
@@ -169,10 +230,11 @@
       : Array(n).fill(f.centavos);
     return valores.map((centavos, i) => {
       const { ano, mes } = somarMeses(f.ano, f.mes, i);
-      return {
+      const doMes = i === 0 ? compras : compras.filter((c) => c.fixa).map((c) => ({ ...c, id: gerarId() }));
+      return comCompras({
         ...base, id: gerarId(), grupo, centavos, ano, mes, dia: f.dia,
         parcela: f.recorrencia === 'parcelada' ? { n: i + 1, total: n } : null,
-      };
+      }, doMes);
     });
   }
 
@@ -202,6 +264,10 @@
       if (d.provisao !== undefined) novo.provisao = d.provisao || null;
       novo.cartao = limparCartao(d.categoria, d.cartao === undefined ? x.cartao : d.cartao);
       novo.tipoGasto = limparTipoGasto(d.categoria, d.tipoGasto === undefined ? x.tipoGasto : d.tipoGasto);
+      // As compras são de cada fatura: só mudam no lançamento editado; os outros da série mantêm valor e compras.
+      const compras = limparCompras(d.categoria, x.id === id && d.compras !== undefined ? d.compras : x.compras);
+      if (x.id !== id && x.compras && x.compras.length) novo.centavos = x.centavos;
+      if (compras.length) { novo.compras = compras; novo.centavos = Math.max(novo.centavos, compras.reduce((a, c) => a + c.centavos, 0)); } else delete novo.compras;
       if (x.id === id && (escopo === 'este' || !x.grupo)) {
         novo.ano = d.ano; novo.mes = d.mes;
         if (x.grupo && !x.parcela) novo.grupo = null;
@@ -279,19 +345,26 @@
     const filtro = categorias && categorias.length ? new Set(categorias) : null;
     const ehDespesa = (l) => CAT[l.categoria]?.tipo === 'saida' && (!filtro || filtro.has(l.categoria));
     const noPeriodo = (l, a, m) => l.ano === a && (m == null || l.mes === m);
-    const itens = lista.filter((l) => ehDespesa(l) && noPeriodo(l, ano, mes));
-    const total = itens.reduce((a, l) => a + l.centavos, 0);
+    const lancs = lista.filter((l) => ehDespesa(l) && noPeriodo(l, ano, mes));
+    // Faturas com compras detalhadas entram compra por compra.
+    const itens = lancs.flatMap(partesGasto);
+    const total = itens.reduce((a, p) => a + p.centavos, 0);
     const porTipo = new Map();
     const semTipo = { qtd: 0, total: 0, ids: [] };
-    for (const l of itens) {
-      if (!l.tipoGasto) { semTipo.qtd++; semTipo.total += l.centavos; semTipo.ids.push(l.id); continue; }
-      const t = porTipo.get(l.tipoGasto) || { id: l.tipoGasto, total: 0, qtd: 0, descricoes: new Map() };
-      t.total += l.centavos; t.qtd++;
-      const k = normalizarTexto(l.desc);
-      const d = t.descricoes.get(k) || { desc: l.desc, total: 0, qtd: 0 };
-      d.total += l.centavos; d.qtd++;
+    for (const p of itens) {
+      if (!p.tipoGasto) {
+        semTipo.qtd++; semTipo.total += p.centavos;
+        if (!p.compra && !p.resto) semTipo.ids.push(p.l.id);
+        continue;
+      }
+      const t = porTipo.get(p.tipoGasto) || { id: p.tipoGasto, total: 0, qtd: 0, descricoes: new Map() };
+      t.total += p.centavos; t.qtd++;
+      const k = normalizarTexto(p.desc);
+      const d = t.descricoes.get(k) || { desc: p.desc, total: 0, qtd: 0, faturas: [] };
+      d.total += p.centavos; d.qtd++;
+      if (p.compra && !d.faturas.includes(p.l.desc)) d.faturas.push(p.l.desc);
       t.descricoes.set(k, d);
-      porTipo.set(l.tipoGasto, t);
+      porTipo.set(p.tipoGasto, t);
     }
     const tipos = [...porTipo.values()].map((t) => ({
       ...TIPO[t.id], total: t.total, qtd: t.qtd, pct: total ? Math.round((t.total / total) * 100) : 0,
@@ -300,24 +373,24 @@
 
     // Tipo de gasto por cartão (cartões com gastos no período).
     const cartoes = new Map();
-    for (const l of itens) {
-      if (l.categoria !== 'cartao') continue;
-      const nome = (l.cartao || '').trim() || 'Sem cartão definido';
+    for (const p of itens) {
+      if (p.l.categoria !== 'cartao') continue;
+      const nome = (p.l.cartao || '').trim() || 'Sem cartão definido';
       const k = normalizarTexto(nome);
       const c = cartoes.get(k) || { nome, total: 0, porTipo: {} };
-      c.total += l.centavos;
-      const t = l.tipoGasto || 'semtipo';
-      c.porTipo[t] = (c.porTipo[t] || 0) + l.centavos;
+      c.total += p.centavos;
+      const t = p.tipoGasto || 'semtipo';
+      c.porTipo[t] = (c.porTipo[t] || 0) + p.centavos;
       cartoes.set(k, c);
     }
 
     // Maiores gastos por descrição (somando todas as vezes).
     const descs = new Map();
-    for (const l of itens) {
-      const k = normalizarTexto(l.desc);
-      const d = descs.get(k) || { desc: l.desc, total: 0, qtd: 0, tipoGasto: l.tipoGasto };
-      d.total += l.centavos; d.qtd++;
-      if (!d.tipoGasto && l.tipoGasto) d.tipoGasto = l.tipoGasto;
+    for (const p of itens) {
+      const k = normalizarTexto(p.desc);
+      const d = descs.get(k) || { desc: p.desc, total: 0, qtd: 0, tipoGasto: p.tipoGasto };
+      d.total += p.centavos; d.qtd++;
+      if (!d.tipoGasto && p.tipoGasto) d.tipoGasto = p.tipoGasto;
       descs.set(k, d);
     }
 
@@ -340,7 +413,7 @@
       evolucao = { tipo: TIPO[alvo], meses: [] };
       for (let i = 5; i >= 0; i--) {
         const { ano: a, mes: m } = somarMeses(ano, mes, -i);
-        const doMes = lista.filter((l) => ehDespesa(l) && l.ano === a && l.mes === m && l.tipoGasto);
+        const doMes = lista.filter((l) => ehDespesa(l) && l.ano === a && l.mes === m).flatMap(partesGasto).filter((p) => p.tipoGasto);
         const doAlvo = doMes.filter((l) => l.tipoGasto === alvo).reduce((s, l) => s + l.centavos, 0);
         const outros = new Map();
         for (const l of doMes) if (l.tipoGasto !== alvo) outros.set(l.tipoGasto, (outros.get(l.tipoGasto) || 0) + l.centavos);
@@ -354,7 +427,7 @@
     const ant = periodoAnterior(ano, mes);
     const antPorTipo = new Map();
     for (const l of lista) {
-      if (ehDespesa(l) && l.tipoGasto && noPeriodo(l, ant.ano, ant.mes)) antPorTipo.set(l.tipoGasto, (antPorTipo.get(l.tipoGasto) || 0) + l.centavos);
+      if (ehDespesa(l) && noPeriodo(l, ant.ano, ant.mes)) for (const p of partesGasto(l)) if (p.tipoGasto) antPorTipo.set(p.tipoGasto, (antPorTipo.get(p.tipoGasto) || 0) + p.centavos);
     }
     for (const t of tipos) {
       const a = antPorTipo.get(t.id) || 0;
@@ -366,7 +439,7 @@
     if (proximo) alertas.push({ cod: 'parcelas', total: proximo, ate: parcelas.ate });
 
     return {
-      total, qtd: itens.length, tipos, semTipo, maior: tipos[0] || null,
+      total, qtd: lancs.length, tipos, semTipo, maior: tipos[0] || null,
       cartoes: [...cartoes.values()].sort((a, b) => b.total - a.total),
       maioresDescricoes: [...descs.values()].sort((a, b) => b.total - a.total).slice(0, 5),
       parcelas, evolucao, alertas,
@@ -457,6 +530,7 @@
       pago: !!x.pago, parcela: p, criadoEm: Number(x.criadoEm) || Date.now(),
       provisao: x.provisao ? String(x.provisao).slice(0, 80) : null, cartao: limparCartao(x.categoria, x.cartao),
       tipoGasto: limparTipoGasto(x.categoria, x.tipoGasto),
+      ...(() => { const c = limparCompras(x.categoria, x.compras); return c.length ? { compras: c, centavos: Math.max(centavos, c.reduce((a, y) => a + y.centavos, 0)) } : {}; })(),
     };
   }
 
@@ -709,10 +783,12 @@
     for (const l of lista) {
       if (!chaves.has(l.ano * 12 + l.mes) || !(l.categoria in valores)) continue;
       valores[l.categoria] += l.centavos;
-      if (l.tipoGasto && TIPO[l.tipoGasto] && CAT[l.categoria].tipo === 'saida') {
-        const t = porTipo.get(l.tipoGasto) || { ...TIPO[l.tipoGasto], total: 0, porCat: {} };
-        t.total += l.centavos; t.porCat[l.categoria] = (t.porCat[l.categoria] || 0) + l.centavos;
-        porTipo.set(l.tipoGasto, t);
+      if (CAT[l.categoria].tipo !== 'saida') continue;
+      for (const p of partesGasto(l)) {
+        if (!p.tipoGasto || !TIPO[p.tipoGasto]) continue;
+        const t = porTipo.get(p.tipoGasto) || { ...TIPO[p.tipoGasto], total: 0, porCat: {} };
+        t.total += p.centavos; t.porCat[l.categoria] = (t.porCat[l.categoria] || 0) + p.centavos;
+        porTipo.set(p.tipoGasto, t);
       }
     }
     const n = meses.length;
@@ -796,6 +872,7 @@
     LIMITES_PLANO, novoPlano, totaisPlano, limparPlano, csvPlano,
     CARTOES_SUGERIDOS, mesmoCartao, painel, detalhesCategoria, periodoAnterior, variacao,
     TIPOS_GASTO, TIPO, sugerirTipoGasto, gastos,
+    MAX_COMPRAS, limparCompras, somaCompras, partesGasto, comprasFixasAnteriores, lerComprasDoTexto,
     PERIODOS, PERIODO, PLANOS_ASSINATURA, PLANO_ASSINATURA, PRECOS_PADRAO, limparPrecos, precoPeriodo, opcoesAssinatura,
     MAX_CENARIOS, PCTS_TIPO, baseSimulacao, simular, impactoMetas, limparCenario,
     MAX_PROVISOES, gerarProvisoes, limparProvisao, consumoProvisoes, reservadoProvisoes,

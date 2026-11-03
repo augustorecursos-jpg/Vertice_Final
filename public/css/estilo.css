@@ -782,6 +782,54 @@ table.ovr tbody th { min-width: 180px; }
   body { background: #fff; }
 }
 
+/* ---------- compras da fatura do cartão ---------- */
+.fat-tog { display: flex; align-items: center; justify-content: space-between; gap: 1em; background: var(--claro-50); border: 1px solid var(--borda); border-radius: 14px; padding: .7em .9em; cursor: pointer; }
+.fat-tog b { color: var(--marinho-900); display: block; }
+.fat-tog small { display: block; color: var(--suave); font-size: .8rem; }
+input.chave-sw { appearance: none; -webkit-appearance: none; width: 44px; height: 24px; border-radius: 99px; background: var(--borda-forte); position: relative; flex: none; cursor: pointer; transition: background .15s; margin: 0; }
+input.chave-sw::after { content: ''; position: absolute; left: 3px; top: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: left .15s; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+input.chave-sw:checked { background: var(--primaria); }
+input.chave-sw:checked::after { left: 23px; }
+input.chave-sw:focus-visible { outline: 3px solid var(--claro-300); outline-offset: 2px; }
+.fat-import { display: flex; align-items: center; gap: .6em; background: var(--ambar-100); border: 1px solid #f3dca5; color: #6d4a00; border-radius: 12px; padding: .5em .8em; font-size: .86rem; margin-top: .6em; flex-wrap: wrap; }
+.fat-import .btn { margin-left: auto; }
+.fat-wrap { overflow-x: auto; }
+.fat-tab { width: 100%; border-collapse: collapse; margin-top: .6em; font-size: .88rem; }
+.fat-tab th { font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; color: var(--suave); text-align: left; padding: .3em .3em; border-bottom: 1px solid var(--borda); white-space: nowrap; }
+.fat-tab td { padding: .25em .2em; border-bottom: 1px solid #edf2f7; vertical-align: middle; }
+.fat-tab input[type=text] { padding: .45em .55em; font-size: .88rem; min-width: 8em; }
+.fat-tab .campo-valor input { text-align: right; width: 7.5em; min-width: 0; padding-left: 2.2em; }
+.fat-tab select { padding: .42em .5em; font-size: .85rem; min-width: 9.5em; }
+.fat-fixo { font-size: .78rem; color: var(--suave); white-space: nowrap; display: inline-flex; align-items: center; gap: .3em; cursor: pointer; }
+.fat-rod { display: flex; justify-content: space-between; align-items: center; gap: 1em; margin-top: .5em; font-size: .88rem; color: var(--suave); flex-wrap: wrap; }
+.fat-rod b { color: var(--marinho-900); font-variant-numeric: tabular-nums; }
+.dica-auto { font-size: .76rem; color: var(--ciano-700); font-weight: 700; margin: .3em 0 0; min-height: 0; }
+.dica-auto:empty { display: none; }
+.dica-auto svg.ic { width: 1em; height: 1em; vertical-align: -.15em; }
+button.tag-compras { border: 0; font: inherit; font-size: .76rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: .25em; }
+button.tag-compras svg.ic { width: .9em; height: .9em; }
+.itens-fat { margin: -.2em 0 .5em 4.6em; border-left: 3px solid #fed7aa; padding: .3em .2em .3em .9em; display: grid; gap: .3em; }
+.itens-fat > div { display: grid; grid-template-columns: minmax(0, 1fr) auto 7.5em; gap: .8em; font-size: .86rem; align-items: center; }
+.itens-fat .tg { font-size: .76rem; font-weight: 700; color: var(--suave); }
+.itens-fat .n { text-align: right; font-variant-numeric: tabular-nums; color: var(--marinho-900); }
+.itens-fat .resto { color: var(--suave); font-style: italic; }
+@media (max-width: 640px) {
+  .fat-tab thead { display: none; }
+  .fat-tab tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .3em .4em; padding: .5em 0; border-bottom: 1px solid var(--borda); }
+  .fat-tab td { border: 0; padding: 0; }
+  .fat-tab td:nth-child(1) { grid-column: 1 / -1; }
+  .fat-tab td:nth-child(1) input { width: 100%; }
+  .fat-tab td:nth-child(2) { grid-column: 1; }
+  .fat-tab td:nth-child(3) { grid-column: 2; }
+  .fat-tab td:nth-child(3) select { min-width: 0; max-width: 46vw; }
+  .fat-tab td:nth-child(4) { grid-column: 1; }
+  .fat-tab td:nth-child(5) { grid-column: 2; justify-self: end; }
+  .itens-fat { margin-left: 1em; }
+  .itens-fat > div { grid-template-columns: minmax(0, 1fr) auto; }
+  .itens-fat .tg { grid-row: 2; }
+  .itens-fat .n { grid-row: 1 / span 2; grid-column: 2; }
+}
+
 /* ---------- simulador ---------- */
 .sim-cab .sim-acoes { gap: .5em; }
 .sim-cab .sim-cenarios { order: 4; }

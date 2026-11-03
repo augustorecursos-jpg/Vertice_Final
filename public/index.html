@@ -263,6 +263,7 @@
         <div>
           <label class="rotulo" for="f-valor" id="rotulo-valor">Valor</label>
           <div class="campo-valor"><span>R$</span><input type="text" id="f-valor" inputmode="decimal" placeholder="0,00" required></div>
+          <p class="dica-auto" id="dica-valor"></p>
           <p class="erro-campo" id="e-valor"></p>
         </div>
         <div>
@@ -280,6 +281,7 @@
           <div class="tipos-g-lista" id="f-tipos"></div>
           <p class="dica" id="dica-tipo"></p>
         </fieldset>
+        <div class="inteiro" id="bloco-compras" hidden></div>
         <div class="inteiro">
           <div class="rotulo-linha"><label class="rotulo" for="f-obs">Observações <small>(opcional)</small></label><small class="contador" id="c-obs" aria-live="polite"></small></div>
           <textarea id="f-obs" rows="3" maxlength="1000" placeholder="Ex.: pago via Pix, nº do contrato, combinado com o fornecedor…"></textarea>

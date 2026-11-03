@@ -457,3 +457,68 @@ test('planos por período: preços, descontos e opções da mensagem', () => {
   assert.equal(N.limparPrecos({}).grupo.anual, 601800);
   assert.deepEqual(N.PERIODOS.map((p) => p.dias), [30, 90, 180, 365]);
 });
+
+test('fatura do cartão com compras detalhadas: valor, tipos, resto não detalhado e fixas', () => {
+  const compras = [
+    { desc: 'Claude IA', centavos: 11000, tipoGasto: 'assinaturas', fixa: true },
+    { desc: 'iFood', centavos: 8640, tipoGasto: 'alimentacao' },
+    { desc: 'Posto', centavos: 22000, tipoGasto: null },
+  ];
+  // valor da fatura menor que a soma: vale a soma
+  let [f] = N.gerar({ desc: 'Cartão PicPay', centavos: 100, categoria: 'cartao', cartao: 'PicPay', ano: 2026, mes: 9, dia: 30, compras });
+  assert.equal(f.centavos, 41640);
+  assert.equal(f.compras.length, 3);
+  assert.equal(f.compras[0].fixa, true);
+  // compras só em cartão
+  assert.equal(N.gerar({ desc: 'Mercado', centavos: 100, categoria: 'variavel', ano: 2026, mes: 9, dia: 1, compras })[0].compras, undefined);
+  // série mensal: meses seguintes levam só as fixas
+  const serie = N.gerar({ desc: 'Cartão PicPay', centavos: 50000, categoria: 'cartao', cartao: 'PicPay', ano: 2026, mes: 9, dia: 30, compras, recorrencia: 'mensal', quantidade: 3 });
+  assert.equal(serie[0].compras.length, 3);
+  assert.deepEqual(serie[1].compras.map((c) => c.desc), ['Claude IA']);
+  assert.notEqual(serie[1].compras[0].id, serie[0].compras[0].id);
+
+  // fatura de R$ 500 com R$ 416,40 detalhado
+  f = N.limpar({ ...f, id: 'f1', centavos: 50000 });
+  const ls = [f, ...N.gerar({ desc: 'Netflix', centavos: 5590, categoria: 'cartao', cartao: 'Nubank', ano: 2026, mes: 9, dia: 5, tipoGasto: 'assinaturas' })];
+  const g = N.gastos(ls, 2026, 9);
+  assert.equal(g.total, 55590);
+  assert.equal(g.qtd, 2);
+  const assin = g.tipos.find((t) => t.id === 'assinaturas');
+  assert.equal(assin.total, 11000 + 5590);
+  assert.deepEqual(assin.descricoes.find((d) => d.desc === 'Claude IA').faturas, ['Cartão PicPay']);
+  assert.equal(g.semTipo.total, 22000 + 8360); // Posto + não detalhado
+  assert.deepEqual(g.semTipo.ids, []); // nada para classificar no lançamento inteiro
+  const picpay = g.cartoes.find((c) => c.nome === 'PicPay');
+  assert.equal(picpay.total, 50000);
+  assert.equal(picpay.porTipo.alimentacao, 8640);
+  assert.ok(g.maioresDescricoes.some((d) => d.desc === 'Cartão PicPay (não detalhado)'));
+  // simulador enxerga as compras
+  const b = N.baseSimulacao(ls, 2026, 9);
+  assert.equal(b.tipos.find((t) => t.id === 'alimentacao').porCat.cartao, 8640);
+  // sugestão aprende com as compras
+  assert.equal(N.sugerirTipoGasto('posto', ls), 'transporte');
+  assert.equal(N.sugerirTipoGasto('claude ia', ls), 'assinaturas');
+
+  // editar: compras mudam só na fatura editada; tirar do cartão remove as compras
+  let lista = N.editar(ls, 'f1', { desc: 'Cartão PicPay', centavos: 1000, categoria: 'cartao', cartao: 'PicPay', ano: 2026, mes: 9, dia: 30, compras: [{ desc: 'Uber', centavos: 3000, tipoGasto: 'transporte' }] });
+  assert.equal(lista[0].centavos, 3000);
+  assert.deepEqual(lista[0].compras.map((c) => c.desc), ['Uber']);
+  lista = N.editar(lista, 'f1', { desc: 'X', centavos: 1000, categoria: 'variavel', ano: 2026, mes: 9, dia: 30 });
+  assert.equal(lista[0].compras, undefined);
+  // validação
+  assert.deepEqual(N.limparCompras('cartao', [{ desc: '', centavos: 10 }, { desc: 'A', centavos: -1 }, { desc: 'B', centavos: 5, tipoGasto: 'xx' }]).map((c) => [c.desc, c.tipoGasto]), [['B', null]]);
+
+  // fixas da fatura anterior do mesmo cartão
+  const ant = N.comprasFixasAnteriores(ls, 'picpay', 2026, 10);
+  assert.deepEqual(ant.compras.map((c) => c.desc), ['Claude IA']);
+  assert.deepEqual(ant.de, { ano: 2026, mes: 9 });
+  assert.equal(N.comprasFixasAnteriores(ls, 'Nubank', 2026, 10).compras.length, 0);
+  assert.equal(N.comprasFixasAnteriores(ls, 'PicPay', 2026, 9).compras.length, 0);
+
+  // ler compras das observações
+  const t = N.lerComprasDoTexto('Fixos:\nR$ 179,26 - Espaço Laser\nR$ 110,00 - Claude IA\n\nVariáveis:\niFood - R$ 86,40\nFatura fecha dia 20.');
+  assert.deepEqual(t.compras, [
+    { desc: 'Espaço Laser', centavos: 17926, fixa: true }, { desc: 'Claude IA', centavos: 11000, fixa: true }, { desc: 'iFood', centavos: 8640, fixa: false },
+  ]);
+  assert.equal(t.sobra, 'Fatura fecha dia 20.');
+});
