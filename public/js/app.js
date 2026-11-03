@@ -76,7 +76,7 @@
 
   // ---------- servidor ----------
   let eu = null;                     // usuário logado
-  let dados = { lancamentos: [], planos: [], provisoes: [] };   // lançamentos, planejamentos e provisões do usuário
+  let dados = { lancamentos: [], planos: [], provisoes: [], cenarios: [] };   // lançamentos, planejamentos, provisões e cenários do simulador
   let rev = 0;                       // revisão dos dados no servidor
 
   async function api(metodo, url, corpo) {
@@ -109,11 +109,11 @@
       do {
         sinc.pendente = false;
         try {
-          rev = (await api('PUT', '/api/dados', { rev, lancamentos: dados.lancamentos, planos: dados.planos, provisoes: dados.provisoes })).rev;
+          rev = (await api('PUT', '/api/dados', { rev, lancamentos: dados.lancamentos, planos: dados.planos, provisoes: dados.provisoes, cenarios: dados.cenarios })).rev;
           marcarSinc('ok');
         } catch (e) {
           if (e.status === 409) {
-            rev = e.dados.rev; dados.lancamentos = e.dados.lancamentos; dados.planos = e.dados.planos || []; dados.provisoes = e.dados.provisoes || [];
+            rev = e.dados.rev; dados.lancamentos = e.dados.lancamentos; dados.planos = e.dados.planos || []; dados.provisoes = e.dados.provisoes || []; dados.cenarios = e.dados.cenarios || [];
             sinc.pendente = false; marcarSinc('ok'); render();
             toast('Seus dados mudaram em outro dispositivo. Carreguei a versão mais recente; confira a última alteração.', { erro: true, tempo: 9000 });
           } else if (e.status >= 400 && e.status < 500) {
@@ -132,7 +132,7 @@
     if (sinc.ocupado || sinc.estado !== 'ok' || $('.fundo-modal') || document.activeElement?.closest('#planos')) return;
     try {
       const d = await api('GET', '/api/dados');
-      if (d.rev !== rev && !sinc.ocupado) { rev = d.rev; dados.lancamentos = d.lancamentos; dados.planos = d.planos || []; dados.provisoes = d.provisoes || []; render(); }
+      if (d.rev !== rev && !sinc.ocupado) { rev = d.rev; dados.lancamentos = d.lancamentos; dados.planos = d.planos || []; dados.provisoes = d.provisoes || []; dados.cenarios = d.cenarios || []; render(); }
     } catch { /* tenta de novo na próxima vez */ }
   }
 
@@ -145,7 +145,7 @@
   const agora = new Date();
   const est = {
     secao: 'mes', ano: agora.getFullYear(), mes: agora.getMonth(),
-    filtro: 'todos', filtroProvisao: null, filtroCartao: null, painelAno: false, painelCats: new Set(), painelAbertas: new Set(), painelAba: 'resumo', gastosAbertos: new Set(), busca: '', ordem: prefs.ordem, abertas: new Set(),
+    filtro: 'todos', filtroProvisao: null, filtroCartao: null, painelAno: false, painelCats: new Set(), painelAbertas: new Set(), painelAba: 'resumo', gastosAbertos: new Set(), sim: { base: 'mes', ativo: null, cen: { valores: {}, tipos: {} } }, simTiposAberto: false, busca: '', ordem: prefs.ordem, abertas: new Set(),
   };
 
   // ---------- toast ----------
@@ -437,7 +437,7 @@
   }
   function lerHash() {
     const [s, sub] = location.hash.replace('#', '').split('/');
-    est.secao = ['mes', 'dashboard', 'ano', 'planos', 'ajustes'].includes(s) || (s === 'usuarios' && eu?.perfil === 'admin') ? s : 'mes';
+    est.secao = ['mes', 'dashboard', 'ano', 'planos', 'sim', 'ajustes'].includes(s) || (s === 'usuarios' && eu?.perfil === 'admin') ? s : 'mes';
     est.plano = s === 'planos' && sub ? decodeURIComponent(sub) : null;
     render();
     window.scrollTo({ top: 0 });
@@ -455,6 +455,7 @@
     if (est.secao === 'ajustes') renderAjustes();
     if (est.secao === 'usuarios') renderUsuarios();
     if (est.secao === 'planos') renderPlanos();
+    if (est.secao === 'sim') renderSimulador();
   }
 
   function atrasados() {
@@ -470,11 +471,11 @@
     $('#nome-usuario').textContent = nome || 'Você';
     $('#av-usuario').textContent = (nome || 'V').split(/\s+/).map((p) => p[0]).slice(0, 2).join('').toUpperCase();
     const ano = anual();
-    const comPeriodo = ['mes', 'dashboard', 'ano'].includes(est.secao);
+    const comPeriodo = ['mes', 'dashboard', 'ano', 'sim'].includes(est.secao);
     $('.topo .mes').hidden = !comPeriodo;
     $('#btn-hoje').hidden = !comPeriodo;
     $('.topo').classList.toggle('sem-periodo', !comPeriodo);
-    $('#rotulo-periodo').textContent = ano ? 'Ano de referência' : 'Mês de referência';
+    $('#rotulo-periodo').textContent = ano ? 'Ano de referência' : est.secao === 'sim' ? 'Base da simulação' : 'Mês de referência';
     $('#nome-mes').textContent = ano ? est.ano : `${MESES[est.mes]} ${est.ano}`;
     $('#competencia').value = `${est.ano}-${String(est.mes + 1).padStart(2, '0')}`;
     $('#mes-ant').setAttribute('aria-label', ano ? 'Ano anterior' : 'Mês anterior');
@@ -952,6 +953,270 @@
     hidratar(raiz);
   }
 
+  // ---------- simulador (e se…?) ----------
+  // Só calcula: nenhum lançamento é alterado. Cenários salvos ficam em dados.cenarios.
+  const novoCenarioSim = () => ({ valores: {}, tipos: {} });
+  const BOM_SUBIR = { entrada: true, reserva: true, saida: false };
+  const mesAno = (m) => (m ? `${MESES_CURTOS[m.mes].toLowerCase()}/${m.ano}` : '');
+  const duracao = (n) => {
+    const a = Math.floor(n / 12), m = n % 12;
+    return [a ? `${a} ${a === 1 ? 'ano' : 'anos'}` : '', m ? `${m} ${m === 1 ? 'mês' : 'meses'}` : ''].filter(Boolean).join(' e ') || '0 meses';
+  };
+
+  function calcSim() {
+    const s = est.sim;
+    const base = N.baseSimulacao(dados.lancamentos, est.ano, est.mes, s.base);
+    return { base, res: N.simular(base, s.cen) };
+  }
+  const simAlterado = () => {
+    const s = est.sim, salvo = dados.cenarios.find((c) => c.id === s.ativo);
+    const norm = (c) => JSON.stringify({ base: c.base, valores: Object.entries(c.valores).sort(), tipos: Object.entries(c.tipos).sort() });
+    return salvo ? norm(salvo) !== norm({ base: s.base, ...s.cen }) : Object.keys(s.cen.valores).length + Object.keys(s.cen.tipos).length > 0;
+  };
+
+  function chipDelta(d, subirEhBom) {
+    if (!d) return '<span class="dchip zero">sem mudança</span>';
+    const bom = (d > 0) === subirEhBom;
+    return `<span class="dchip ${bom ? 'bom' : 'ruim'}">${d > 0 ? '+' : '−'}${moeda(Math.abs(d))}</span>`;
+  }
+  const maxSlider = (hoje) => Math.max(100000, Math.ceil((hoje * 2) / 10000) * 10000);
+
+  function htmlLinhaSim(c, base, res) {
+    const hoje = base.valores[c.id], manual = est.sim.cen.valores[c.id];
+    const valor = Number.isInteger(manual) ? manual : hoje;
+    const max = Math.max(maxSlider(hoje), valor);
+    const red = res.reducao[c.id] || 0;
+    return `<div class="aj" data-cat="${c.id}" data-simcat="${c.id}">
+      <div class="aj-topo"><label class="nome" for="sim-v-${c.id}"><span class="chave"></span>${esc(c.nome)}</label><span class="hoje">hoje ${moeda(hoje)}</span></div>
+      <div class="aj-linha">
+        <span class="slider"><span class="marca-hoje" style="left:calc(${(hoje / max) * 100}% + ${8 - (hoje / max) * 16}px)" title="Valor de hoje"></span>
+          <input type="range" min="0" max="${max}" step="1000" value="${valor}" style="--p:${(valor / max) * 100}%" data-simrange="${c.id}" aria-label="${esc(c.nome)}: valor simulado"></span>
+        <span class="campo-valor sim"><span>R$</span><input type="text" inputmode="decimal" id="sim-v-${c.id}" data-simval="${c.id}" value="${N.valorParaCampo(valor)}"></span>
+        <span data-simchip="${c.id}">${chipDelta(res.valores[c.id] - hoje, BOM_SUBIR[c.tipo])}</span>
+      </div>
+      <small class="aj-red" data-simred="${c.id}" ${red ? '' : 'hidden'}>${red ? `inclui −${moeda(red)} dos cortes por tipo de gasto` : ''}</small>
+    </div>`;
+  }
+
+  function htmlTiposSim(base, res) {
+    if (!base.tipos.length) return '<p class="dica">Classifique suas despesas por <b>tipo de gasto</b> para simular cortes como “gastar 20% menos com alimentação”.</p>';
+    const linhas = base.tipos.slice(0, 8).map((t) => {
+      const pct = est.sim.cen.tipos[t.id] || 0;
+      return `<div><span>${t.emoji} ${esc(t.nome)} <small>hoje ${moeda(t.total)}</small></span>
+        <span class="pct" role="group" aria-label="Corte em ${esc(t.nome)}">${N.PCTS_TIPO.map((p) => `<button type="button" data-simtipo="${t.id}" data-pct="${p}" class="${p === pct ? 'sel' : ''}" aria-pressed="${p === pct}">${p ? `−${p}%` : '0%'}</button>`).join('')}</span>
+        ${chipDelta(-Math.round((t.total * pct) / 100), false)}</div>`;
+    }).join('');
+    const reds = CATEGORIAS.filter((c) => res.reducao[c.id]).map((c) => `−${moeda(res.reducao[c.id])} em ${c.nome}`);
+    return `<div class="tipos-aj">${linhas}</div><p class="dica">${reds.length ? `Os cortes já entram nas categorias acima: ${esc(reds.join(', '))}.` : 'Os cortes entram nas categorias onde esses gastos foram lançados.'}</p>`;
+  }
+
+  function graficoSim(res) {
+    const pts = res.projecao;
+    const W = 640, H = 230, PL = 66, PR = 104, PT = 14, PB = 30;
+    const vals = pts.flatMap((p) => [p.hoje, p.simulado]);
+    let lo = Math.min(0, ...vals), hi = Math.max(0, ...vals);
+    if (hi === lo) hi = lo + 100000;
+    const passo = (() => { const bruto = (hi - lo) / 4; const e = 10 ** Math.floor(Math.log10(bruto)); return [1, 2, 2.5, 5, 10].map((k) => k * e).find((k) => k >= bruto); })();
+    lo = Math.floor(lo / passo) * passo; hi = Math.ceil(hi / passo) * passo;
+    const x = (i) => PL + (i * (W - PL - PR)) / (pts.length - 1);
+    const y = (v) => PT + (1 - (v - lo) / (hi - lo)) * (H - PT - PB);
+    const grade = [];
+    for (let v = lo; v <= hi + 1; v += passo) grade.push(`<line x1="${PL}" x2="${W - PR}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" stroke="${v === 0 ? '#c3cfdc' : '#e1e9f1'}"/><text x="${PL - 8}" y="${(y(v) + 4).toFixed(1)}" text-anchor="end">${esc(moedaCurta(v))}</text>`);
+    const linha = (k) => pts.map((p, i) => `${x(i).toFixed(1)},${y(p[k]).toFixed(1)}`).join(' ');
+    const fimH = pts.at(-1).hoje, fimS = pts.at(-1).simulado;
+    let yH = y(fimH) + 4, yS = y(fimS) + 4;
+    if (Math.abs(yH - yS) < 30) { if (fimS >= fimH) { yS = Math.min(yS, yH) - 15; yH = yS + 30; } else { yH = Math.min(yS, yH) - 15; yS = yH + 30; } }
+    const rot = (yy, v, nome) => `<text x="${W - PR + 10}" y="${yy.toFixed(1)}" class="v">${esc(moedaCurta(v))}</text><text x="${W - PR + 10}" y="${(yy + 15).toFixed(1)}">${nome}</text>`;
+    const faixa = (W - PL - PR) / (pts.length - 1);
+    const alvos = pts.map((p, i) => `<rect x="${(x(i) - faixa / 2).toFixed(1)}" y="${PT}" width="${faixa.toFixed(1)}" height="${H - PT - PB}" fill="transparent" tabindex="0"
+      data-tip="${esc(`${MESES[p.mes]} de ${p.ano}|${moeda(p.simulado)} simulado|hoje ${moeda(p.hoje)} · ${p.simulado - p.hoje >= 0 ? '+' : '−'}${moeda(Math.abs(p.simulado - p.hoje))}`)}"></rect>`).join('');
+    const meses = pts.map((p, i) => `<text x="${x(i).toFixed(1)}" y="${H - 8}" text-anchor="middle">${MESES_CURTOS[p.mes].toLowerCase()}</text>`).join('');
+    return `<svg class="graf-sim" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Quanto terá guardado em 12 meses: como está hoje ${esc(moeda(fimH))}, simulado ${esc(moeda(fimS))}">
+      ${grade.join('')}${meses}
+      <polyline points="${linha('hoje')}" fill="none" stroke="#9aaabd" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <polyline points="${linha('simulado')}" fill="none" stroke="#005ea4" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <circle cx="${x(11).toFixed(1)}" cy="${y(fimH).toFixed(1)}" r="4.5" fill="#9aaabd" stroke="#fff" stroke-width="2"/>
+      <circle cx="${x(11).toFixed(1)}" cy="${y(fimS).toFixed(1)}" r="4.5" fill="#005ea4" stroke="#fff" stroke-width="2"/>
+      ${fimS === fimH ? rot(y(fimS) + 4, fimS, 'hoje = simulado') : rot(yS, fimS, 'simulado') + rot(yH, fimH, 'hoje')}${alvos}</svg>`;
+  }
+
+  function htmlResultadoSim(base, res) {
+    const h = res.hoje, s = res.simulado;
+    const comp = ({ rotulo, antes, depois, dif, subirEhBom = true, pontos = false, dest = false }) => {
+      const mudou = antes !== depois;
+      const fmt = (v) => (v == null ? '—' : pontos ? `${v}%` : moeda(v));
+      const d = antes == null || depois == null ? 0 : depois - antes;
+      const bom = (d > 0) === subirEhBom;
+      return `<div class="comp-card ${dest ? 'dest' : ''}"><span class="rot">${rotulo}</span><div class="lado">
+        ${mudou ? `<span class="antes">${fmt(antes)}</span>` : ''}<span class="depois ${!dest && depois < 0 ? 'txt-erro' : ''}">${fmt(depois)}</span>
+        ${mudou && d ? `<span class="ganho ${bom ? '' : 'ruim'}">${ic(d > 0 ? 'sobe' : 'desce')} ${d > 0 ? '+' : '−'}${pontos ? `${Math.abs(d)} ${Math.abs(d) === 1 ? 'ponto' : 'pontos'}` : moeda(Math.abs(d))}</span>` : ''}
+        ${dif && !mudou ? `<span class="igual">sem mudança</span>` : ''}</div></div>`;
+    };
+    const metas = N.impactoMetas(dados.planos, res, est.ano, est.mes);
+    const textoMeta = (m) => {
+      if (m.falta === 0) return 'O planejado já cobre a meta.';
+      const q = (x) => (x.meses == null ? '<b>não atinge</b> (nada sobra no mês)' : `atinge em <b>${mesAno(x.quando)}</b> (${duracao(x.meses)})`);
+      if (m.antes == null || m.antes === 0) return `Hoje: ${q(m.hoje)}${m.antes === 0 ? ' · o cenário não muda o prazo' : ` · Simulado: ${q(m.simulado)}`}`;
+      return `Hoje: ${q(m.hoje)} · Simulado: ${q(m.simulado)}, <b class="${m.antes > 0 ? 'txt-ok' : 'txt-erro'}">${duracao(Math.abs(m.antes))} ${m.antes > 0 ? 'antes' : 'depois'}</b>`;
+    };
+    return `<div class="cartao"><div class="cartao-cab"><div><h2>Hoje × simulado</h2><p>Por mês${base.modo === 'media3' ? ', pela média de 3 meses' : ''}</p></div></div>
+        <div class="comp">
+          ${comp({ rotulo: 'Saldo que sobra no mês', antes: h.saldo, depois: s.saldo, dest: true, dif: true })}
+          ${comp({ rotulo: 'Taxa de poupança', antes: h.taxa, depois: s.taxa, pontos: true })}
+          ${comp({ rotulo: 'Despesas', antes: h.despesas, depois: s.despesas, subirEhBom: false })}
+          ${comp({ rotulo: 'Investido e poupado', antes: h.reservas, depois: s.reservas })}
+          ${comp({ rotulo: '% das receitas em despesas', antes: h.pctDespesas, depois: s.pctDespesas, pontos: true, subirEhBom: false })}
+        </div></div>
+      <div class="cartao"><div class="cartao-cab"><div><h2>Quanto você terá guardado em 12 meses</h2><p>Sobra do mês + investimentos + poupança, acumulados</p></div></div>
+        ${graficoSim(res)}
+        <div class="legenda-linhas"><span><i style="background:#005ea4"></i>Simulado</span><span><i style="background:#9aaabd"></i>Como está hoje</span></div></div>
+      <div class="cartao"><div class="cartao-cab"><div><h2>Impacto nas suas metas</h2><p>${metas.length ? 'Se todo o valor guardado no mês for para a meta' : 'Planejamentos com meta'}</p></div></div>
+        ${metas.length ? `<ul class="metas">${metas.map((m) => `<li><b>${esc(m.titulo)}</b><span>meta ${moeda(m.meta)}</span>
+          <span class="b" role="meter" aria-valuenow="${m.pct}" aria-valuemin="0" aria-valuemax="100" aria-label="Planejado de ${esc(m.titulo)}"><span style="width:${m.pct}%"></span></span>
+          <small>${m.pct}% planejado · falta ${moeda(m.falta)}. ${textoMeta(m)}</small></li>`).join('')}</ul>`
+        : `<p class="suave">Crie um planejamento com meta em <a href="#planos">Planejamentos</a> para ver em quanto tempo você chega lá.</p>`}</div>`;
+  }
+
+  function renderSimulador() {
+    const raiz = $('#simulador');
+    const s = est.sim;
+    const { base, res } = calcSim();
+    const alterado = simAlterado();
+    const ativo = dados.cenarios.find((c) => c.id === s.ativo);
+    const resumoCen = (c) => {
+      const partes = Object.keys(c.valores).length + Object.keys(c.tipos).length;
+      return `${partes} ${partes === 1 ? 'ajuste' : 'ajustes'}${c.base === 'media3' ? ' · média 3 meses' : ''}`;
+    };
+    raiz.innerHTML = `
+      <div class="cartao dash-cab sim-cab">
+        <div><h2><span class="bolha ciano"><i data-ic="brilho"></i></span> Simulador · e se…?</h2>
+          <p>Mude os valores e veja na hora como ficaria. <b>Nada é alterado nos seus lançamentos.</b></p></div>
+        <div class="alternar" role="group" aria-label="Base da simulação">
+          <button type="button" data-simbase="mes" aria-pressed="${s.base === 'mes'}" class="${s.base === 'mes' ? 'ativo' : ''}">${esc(MESES[est.mes])} ${est.ano}</button>
+          <button type="button" data-simbase="media3" aria-pressed="${s.base === 'media3'}" class="${s.base === 'media3' ? 'ativo' : ''}">Média dos últimos 3 meses</button>
+        </div>
+        <div class="linha sim-acoes">
+          <button type="button" class="btn sec" data-sim="restaurar" ${Object.keys(s.cen.valores).length + Object.keys(s.cen.tipos).length ? '' : 'disabled'}>Restaurar valores de hoje</button>
+          <button type="button" class="btn" data-sim="salvar">${ic('check')} ${ativo ? (alterado ? 'Salvar alterações' : 'Salvo') : 'Salvar cenário'}</button>
+        </div>
+        <div class="filtro-cats sim-cenarios"><span class="rot-filtro">Cenários salvos</span>
+          ${dados.cenarios.map((c) => `<button type="button" class="cenario ${c.id === s.ativo ? 'ativo' : ''}" data-simcen="${esc(c.id)}" aria-pressed="${c.id === s.ativo}"><b>${esc(c.nome)}</b><small>${c.id === s.ativo ? (alterado ? 'editando · não salvo' : 'aberto') : esc(resumoCen(c))}</small></button>`).join('') || '<span class="suave">Nenhum ainda. Ajuste os valores e toque em “Salvar cenário”.</span>'}
+          ${ativo ? `<button type="button" class="btn fantasma peq" data-sim="novo">${ic('mais')} Novo cenário</button><button type="button" class="btn fantasma peq apagar" data-sim="excluir">${ic('lixo')} Excluir “${esc(ativo.nome)}”</button>` : ''}
+        </div>
+      </div>
+      <div class="sim-grade">
+        <div class="cartao"><div class="cartao-cab"><div><h2>Ajuste os valores do mês</h2><p>Arraste ou digite. A marca cinza é o valor de hoje.</p></div></div>
+          ${CATEGORIAS.map((c) => htmlLinhaSim(c, base, res)).join('')}
+          <details class="sim-tipos" ${est.simTiposAberto ? 'open' : ''}><summary>Ajustar por tipo de gasto</summary><div id="sim-tipos">${htmlTiposSim(base, res)}</div></details>
+        </div>
+        <div class="sim-coluna" id="sim-res">${htmlResultadoSim(base, res)}</div>
+      </div>`;
+    hidratar(raiz);
+  }
+
+  /** Atualiza resultados sem redesenhar os controles (mantém o foco e o arraste do slider). */
+  function atualizarSim(exceto) {
+    const raiz = $('#simulador');
+    const { base, res } = calcSim();
+    for (const c of CATEGORIAS) {
+      const manual = est.sim.cen.valores[c.id];
+      const valor = Number.isInteger(manual) ? manual : base.valores[c.id];
+      const r = $(`[data-simrange="${c.id}"]`, raiz), v = $(`[data-simval="${c.id}"]`, raiz);
+      if (r !== exceto) { if (valor > +r.max) r.max = valor; r.value = valor; }
+      r.style.setProperty('--p', `${(valor / +r.max) * 100}%`);
+      if (v !== exceto) v.value = N.valorParaCampo(valor);
+      $(`[data-simchip="${c.id}"]`, raiz).innerHTML = chipDelta(res.valores[c.id] - base.valores[c.id], BOM_SUBIR[c.tipo]);
+      const red = res.reducao[c.id] || 0, rr = $(`[data-simred="${c.id}"]`, raiz);
+      rr.hidden = !red; rr.textContent = red ? `inclui −${moeda(red)} dos cortes por tipo de gasto` : '';
+    }
+    $('#sim-tipos', raiz).innerHTML = htmlTiposSim(base, res);
+    $('#sim-res', raiz).innerHTML = htmlResultadoSim(base, res);
+    hidratar($('#sim-res', raiz));
+    const alterado = simAlterado(), ativo = dados.cenarios.find((c) => c.id === est.sim.ativo);
+    const bs = $('[data-sim="salvar"]', raiz);
+    bs.innerHTML = `${ic('check')} ${ativo ? (alterado ? 'Salvar alterações' : 'Salvo') : 'Salvar cenário'}`;
+    $('[data-sim="restaurar"]', raiz).disabled = !(Object.keys(est.sim.cen.valores).length + Object.keys(est.sim.cen.tipos).length);
+    const chip = ativo && $(`[data-simcen="${CSS.escape(ativo.id)}"] small`, raiz);
+    if (chip) chip.textContent = alterado ? 'editando · não salvo' : 'aberto';
+  }
+
+  function definirValorSim(cat, centavos) {
+    const base = N.baseSimulacao(dados.lancamentos, est.ano, est.mes, est.sim.base);
+    if (centavos === base.valores[cat]) delete est.sim.cen.valores[cat];
+    else est.sim.cen.valores[cat] = centavos;
+  }
+
+  function salvarCenario() {
+    const s = est.sim, ativo = dados.cenarios.find((c) => c.id === s.ativo);
+    if (ativo) {
+      const antes = dados.cenarios;
+      dados.cenarios = dados.cenarios.map((c) => (c.id === ativo.id ? N.limparCenario({ ...c, base: s.base, ...structuredClone(s.cen) }) : c));
+      salvar(); toast(`Cenário “${ativo.nome}” atualizado.`, { acao: () => { dados.cenarios = antes; salvar(); } });
+      return;
+    }
+    if (dados.cenarios.length >= N.MAX_CENARIOS) return toast(`Limite de ${N.MAX_CENARIOS} cenários. Exclua um para salvar outro.`, { erro: true });
+    const { modal, fechar } = abrirModal(`
+      <form class="modal" role="dialog" aria-modal="true" aria-labelledby="t-cen" novalidate>
+        <div class="cab-modal"><h2 id="t-cen">Salvar cenário</h2><button type="button" class="btn fantasma icone" data-fechar aria-label="Fechar"><i data-ic="x"></i></button></div>
+        <label class="rotulo" for="cen-nome">Nome do cenário</label>
+        <input type="text" id="cen-nome" maxlength="60" placeholder="Ex.: Aumento de salário + cortar delivery" autofocus required>
+        <p class="dica">Fica guardado só para você. Os lançamentos não mudam.</p>
+        <div class="rodape-modal"><button type="button" class="btn sec" data-fechar>Cancelar</button><button class="btn">${ic('check')} Salvar</button></div>
+      </form>`, { estreito: true });
+    modal.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const nome = $('#cen-nome', modal).value.trim();
+      if (!nome) { $('#cen-nome', modal).focus(); return; }
+      const c = N.limparCenario({ nome, base: s.base, ...structuredClone(s.cen) });
+      dados.cenarios = [...dados.cenarios, c];
+      s.ativo = c.id;
+      fechar(); salvar(); toast(`Cenário “${nome}” salvo.`);
+    });
+  }
+
+  function ligarSimulador() {
+    const raiz = $('#simulador');
+    raiz.addEventListener('input', (e) => {
+      const r = e.target.closest('[data-simrange]');
+      if (r) { definirValorSim(r.dataset.simrange, +r.value); atualizarSim(r); return; }
+      const v = e.target.closest('[data-simval]');
+      if (v) { const c = N.lerValor(v.value); if (Number.isInteger(c) && c >= 0 && c <= 1e11) { definirValorSim(v.dataset.simval, c); atualizarSim(v); } }
+    });
+    raiz.addEventListener('change', (e) => {
+      const v = e.target.closest('[data-simval]');
+      if (v) atualizarSim();
+    });
+    raiz.addEventListener('toggle', (e) => { if (e.target.matches('.sim-tipos')) est.simTiposAberto = e.target.open; }, true);
+    raiz.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-simbase]');
+      if (b) { est.sim.base = b.dataset.simbase; render(); return; }
+      const t = e.target.closest('[data-simtipo]');
+      if (t) {
+        const pct = +t.dataset.pct;
+        if (pct) est.sim.cen.tipos[t.dataset.simtipo] = pct; else delete est.sim.cen.tipos[t.dataset.simtipo];
+        atualizarSim(); $(`#simulador [data-simtipo="${t.dataset.simtipo}"][data-pct="${pct}"]`)?.focus(); return;
+      }
+      const c = e.target.closest('[data-simcen]');
+      if (c) {
+        const cen = dados.cenarios.find((x) => x.id === c.dataset.simcen);
+        if (cen) Object.assign(est.sim, { ativo: cen.id, base: cen.base, cen: structuredClone({ valores: cen.valores, tipos: cen.tipos }) });
+        render(); return;
+      }
+      const a = e.target.closest('[data-sim]')?.dataset.sim;
+      if (a === 'restaurar') { est.sim.cen = novoCenarioSim(); render(); }
+      if (a === 'novo') { Object.assign(est.sim, { ativo: null, cen: novoCenarioSim() }); render(); }
+      if (a === 'salvar') salvarCenario();
+      if (a === 'excluir') {
+        const cen = dados.cenarios.find((x) => x.id === est.sim.ativo);
+        if (!cen) return;
+        const antes = dados.cenarios;
+        dados.cenarios = dados.cenarios.filter((x) => x.id !== cen.id);
+        est.sim.ativo = null;
+        salvar(); toast(`Cenário “${cen.nome}” excluído.`, { acao: () => { dados.cenarios = antes; est.sim.ativo = cen.id; salvar(); } });
+      }
+    });
+  }
+
   // Tooltip único para as barras do dashboard (valor em destaque, rótulo depois).
   function ligarTooltipDashboard() {
     const tip = document.createElement('div');
@@ -969,6 +1234,12 @@
       tip.style.left = `${Math.min(window.innerWidth - w - 8, Math.max(8, x - w / 2))}px`;
       tip.style.top = `${Math.max(8, y - h - 12)}px`;
     };
+    for (const area of [$('#simulador')]) {
+      area.addEventListener('pointermove', (e) => { const a = e.target.closest('[data-tip]'); if (a) mostrar(a, e.clientX, e.clientY); else tip.hidden = true; });
+      area.addEventListener('pointerleave', () => { tip.hidden = true; });
+      area.addEventListener('focusin', (e) => { const a = e.target.closest('[data-tip]'); if (a) { const r = a.getBoundingClientRect(); mostrar(a, r.left + r.width / 2, r.top); } });
+      area.addEventListener('focusout', () => { tip.hidden = true; });
+    }
     const raiz = $('#dashboard');
     raiz.addEventListener('pointermove', (e) => { const a = e.target.closest('[data-tip]'); if (a) mostrar(a, e.clientX, e.clientY); else tip.hidden = true; });
     raiz.addEventListener('pointerleave', () => { tip.hidden = true; });
@@ -1853,7 +2124,7 @@
   (async function iniciar() {
     try {
       const [usuario, d] = await Promise.all([api('GET', '/api/eu'), api('GET', '/api/dados')]);
-      eu = usuario; rev = d.rev; dados.lancamentos = d.lancamentos; dados.planos = d.planos || []; dados.provisoes = d.provisoes || [];
+      eu = usuario; rev = d.rev; dados.lancamentos = d.lancamentos; dados.planos = d.planos || []; dados.provisoes = d.provisoes || []; dados.cenarios = d.cenarios || [];
     } catch (e) {
       $('#carregando').innerHTML = `<div>${ic('alerta')}<h3>Não foi possível carregar seus dados</h3><p>${esc(e.message)}</p>
         <button type="button" class="btn" id="tentar">Tentar de novo</button></div>`;
@@ -1863,6 +2134,7 @@
     $('#carregando').remove();
     ligarPlanos();
     ligarTooltipDashboard();
+    ligarSimulador();
     if (eu.perfil === 'admin') {
       ligarConfigAssinaturas();
       api('GET', '/api/admin/usuarios').then(seloAssinaturas).catch(() => {});

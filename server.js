@@ -228,14 +228,14 @@ app.post('/api/eu/senha', exigirLogin, (req, res) => {
 });
 
 // ---------- dados financeiros (sempre do próprio usuário) ----------
-// carteiras.dados guarda { lancamentos, planos }. Versões antigas guardavam só a lista de lançamentos.
+// carteiras.dados guarda { lancamentos, planos, provisoes, cenarios }. Versões antigas guardavam só a lista de lançamentos.
 function carteira(uid) {
   const c = db.prepare('SELECT dados, rev FROM carteiras WHERE usuario_id = ?').get(uid);
-  if (!c) return { rev: 0, lancamentos: [], planos: [], provisoes: [] };
+  if (!c) return { rev: 0, lancamentos: [], planos: [], provisoes: [], cenarios: [] };
   const d = JSON.parse(c.dados);
   return Array.isArray(d)
-    ? { rev: c.rev, lancamentos: d, planos: [], provisoes: [] }
-    : { rev: c.rev, lancamentos: d.lancamentos || [], planos: d.planos || [], provisoes: d.provisoes || [] };
+    ? { rev: c.rev, lancamentos: d, planos: [], provisoes: [], cenarios: [] }
+    : { rev: c.rev, lancamentos: d.lancamentos || [], planos: d.planos || [], provisoes: d.provisoes || [], cenarios: d.cenarios || [] };
 }
 
 app.get('/api/dados', exigirLogin, (req, res) => {
@@ -244,9 +244,9 @@ app.get('/api/dados', exigirLogin, (req, res) => {
 });
 
 app.put('/api/dados', exigirLogin, (req, res) => {
-  const { rev, lancamentos, planos, provisoes } = req.body || {};
+  const { rev, lancamentos, planos, provisoes, cenarios } = req.body || {};
   if (!Number.isInteger(rev) || !Array.isArray(lancamentos) || (planos !== undefined && !Array.isArray(planos))
-    || (provisoes !== undefined && !Array.isArray(provisoes))) {
+    || (provisoes !== undefined && !Array.isArray(provisoes)) || (cenarios !== undefined && !Array.isArray(cenarios))) {
     return res.status(400).json({ erro: 'Formato inválido.' });
   }
   if (lancamentos.length > MAX_LANCAMENTOS) return res.status(413).json({ erro: `Limite de ${MAX_LANCAMENTOS} lançamentos.` });
@@ -258,6 +258,9 @@ app.put('/api/dados', exigirLogin, (req, res) => {
   if (provisoes && provisoes.length > N.MAX_PROVISOES) return res.status(413).json({ erro: `Limite de ${N.MAX_PROVISOES} provisões.` });
   const provisoesLimpas = provisoes?.map(N.limparProvisao);
   if (provisoesLimpas?.some((p) => !p)) return res.status(400).json({ erro: 'Há provisões inválidas.' });
+  if (cenarios && cenarios.length > N.MAX_CENARIOS) return res.status(413).json({ erro: `Limite de ${N.MAX_CENARIOS} cenários.` });
+  const cenariosLimpos = cenarios?.map(N.limparCenario);
+  if (cenariosLimpos?.some((c) => !c)) return res.status(400).json({ erro: 'Há cenários inválidos.' });
 
   const r = transacao(() => {
     const atual = carteira(req.usuario.id);
@@ -265,7 +268,7 @@ app.put('/api/dados', exigirLogin, (req, res) => {
     const nova = rev + 1;
     db.prepare(`INSERT INTO carteiras (usuario_id, dados, rev) VALUES (?, ?, ?)
       ON CONFLICT (usuario_id) DO UPDATE SET dados = excluded.dados, rev = excluded.rev, atualizado_em = datetime('now')`)
-      .run(req.usuario.id, JSON.stringify({ lancamentos: limpos, planos: planosLimpos || atual.planos, provisoes: provisoesLimpas || atual.provisoes }), nova);
+      .run(req.usuario.id, JSON.stringify({ lancamentos: limpos, planos: planosLimpos || atual.planos, provisoes: provisoesLimpas || atual.provisoes, cenarios: cenariosLimpos || atual.cenarios }), nova);
     return { rev: nova };
   });
   if (r.conflito) return res.status(409).json({ erro: 'Seus dados foram alterados em outro dispositivo.', ...r.conflito });

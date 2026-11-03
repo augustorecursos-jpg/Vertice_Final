@@ -641,10 +641,109 @@
     return '﻿' + linhas.join('\r\n');
   }
 
+  // ---------- simulador ("e se…?") ----------
+  // Nada aqui altera lançamentos: só calcula cenários a partir deles.
+
+  const MAX_CENARIOS = 30;
+  const PCTS_TIPO = [0, 10, 20, 30, 50];
+
+  /** Valores de partida: o mês escolhido ou a média dele com os 2 anteriores. */
+  function baseSimulacao(lista, ano, mes, modo = 'mes') {
+    const meses = modo === 'media3' ? [-2, -1, 0].map((d) => somarMeses(ano, mes, d)) : [{ ano, mes }];
+    const chaves = new Set(meses.map((m) => m.ano * 12 + m.mes));
+    const valores = Object.fromEntries(CATEGORIAS.map((c) => [c.id, 0]));
+    const porTipo = new Map();
+    for (const l of lista) {
+      if (!chaves.has(l.ano * 12 + l.mes) || !(l.categoria in valores)) continue;
+      valores[l.categoria] += l.centavos;
+      if (l.tipoGasto && TIPO[l.tipoGasto] && CAT[l.categoria].tipo === 'saida') {
+        const t = porTipo.get(l.tipoGasto) || { ...TIPO[l.tipoGasto], total: 0, porCat: {} };
+        t.total += l.centavos; t.porCat[l.categoria] = (t.porCat[l.categoria] || 0) + l.centavos;
+        porTipo.set(l.tipoGasto, t);
+      }
+    }
+    const n = meses.length;
+    for (const k in valores) valores[k] = Math.round(valores[k] / n);
+    const tipos = [...porTipo.values()].map((t) => ({
+      ...t, total: Math.round(t.total / n), porCat: Object.fromEntries(Object.entries(t.porCat).map(([k, v]) => [k, Math.round(v / n)])),
+    })).sort((a, b) => b.total - a.total);
+    return { modo: modo === 'media3' ? 'media3' : 'mes', ano, mes, meses, valores, tipos };
+  }
+
+  function totaisSimulacao(v) {
+    const soma = (tipo) => CATEGORIAS.filter((c) => c.tipo === tipo).reduce((a, c) => a + (v[c.id] || 0), 0);
+    const receitas = soma('entrada'), despesas = soma('saida'), reservas = soma('reserva');
+    return {
+      receitas, despesas, reservas, saldo: receitas - despesas - reservas,
+      guardado: receitas - despesas, // sobra do mês + investimentos + poupança
+      taxa: receitas > 0 ? Math.round((reservas / receitas) * 100) : null,
+      pctDespesas: receitas > 0 ? Math.round((despesas / receitas) * 100) : null,
+    };
+  }
+
+  /**
+   * Aplica um cenário sobre a base. cen.valores: { categoria: centavos } substitui o valor do mês;
+   * cen.tipos: { tipoGasto: % de corte } reduz a parte daquele tipo dentro de cada categoria.
+   */
+  function simular(base, cen = {}) {
+    const manuais = cen.valores || {}, cortes = cen.tipos || {};
+    const reducao = {};
+    for (const t of base.tipos) {
+      const pct = cortes[t.id] || 0;
+      if (!pct) continue;
+      for (const [cat, v] of Object.entries(t.porCat)) reducao[cat] = (reducao[cat] || 0) + Math.round((v * pct) / 100);
+    }
+    const valores = {};
+    for (const c of CATEGORIAS) {
+      const v = Number.isInteger(manuais[c.id]) ? manuais[c.id] : base.valores[c.id];
+      valores[c.id] = Math.max(0, v - (reducao[c.id] || 0));
+    }
+    const hoje = totaisSimulacao(base.valores), simulado = totaisSimulacao(valores);
+    const projecao = Array.from({ length: 12 }, (_, i) => ({
+      ...somarMeses(base.ano, base.mes, i + 1), hoje: hoje.guardado * (i + 1), simulado: simulado.guardado * (i + 1),
+    }));
+    return { valores, reducao, hoje, simulado, projecao };
+  }
+
+  /** Em quantos meses cada planejamento com meta seria atingido guardando o valor mensal de hoje e o simulado. */
+  function impactoMetas(planos, res, ano, mes) {
+    const prazo = (falta, g) => (falta === 0 ? 0 : g > 0 ? Math.ceil(falta / g) : null);
+    const quando = (m) => (m == null ? null : somarMeses(ano, mes, m));
+    return planos.filter((p) => p.meta > 0).map((p) => {
+      const t = totaisPlano(p);
+      const mh = prazo(t.falta, res.hoje.guardado), ms = prazo(t.falta, res.simulado.guardado);
+      return {
+        id: p.id, titulo: p.titulo, meta: p.meta, total: t.total, falta: t.falta, pct: Math.min(100, t.pctMeta),
+        hoje: { meses: mh, quando: quando(mh) }, simulado: { meses: ms, quando: quando(ms) },
+        antes: mh != null && ms != null ? mh - ms : null,
+      };
+    });
+  }
+
+  function limparCenario(x) {
+    if (!x || typeof x !== 'object') return null;
+    const nome = String(x.nome || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+    if (!nome) return null;
+    const valores = {}, tipos = {};
+    for (const c of CATEGORIAS) {
+      const v = x.valores?.[c.id];
+      if (Number.isInteger(v) && v >= 0 && v <= 1e11) valores[c.id] = v;
+    }
+    for (const t of TIPOS_GASTO) {
+      const v = x.tipos?.[t.id];
+      if (Number.isInteger(v) && v > 0 && v <= 100) tipos[t.id] = v;
+    }
+    return {
+      id: String(x.id || novoId()).slice(0, 80), nome, base: x.base === 'media3' ? 'media3' : 'mes',
+      valores, tipos, criadoEm: Number(x.criadoEm) || Date.now(),
+    };
+  }
+
   return {
     LIMITES_PLANO, novoPlano, totaisPlano, limparPlano, csvPlano,
     CARTOES_SUGERIDOS, mesmoCartao, painel, detalhesCategoria, periodoAnterior, variacao,
     TIPOS_GASTO, TIPO, sugerirTipoGasto, gastos,
+    MAX_CENARIOS, PCTS_TIPO, baseSimulacao, simular, impactoMetas, limparCenario,
     MAX_PROVISOES, gerarProvisoes, limparProvisao, consumoProvisoes, reservadoProvisoes,
     VERSAO_DADOS, CATEGORIAS, CAT, MESES, MESES_CURTOS,
     lerValor, moeda, moedaCurta, valorParaCampo, dividir,

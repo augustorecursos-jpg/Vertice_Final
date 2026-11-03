@@ -128,6 +128,23 @@ test('provisões são salvas junto, validadas e mantidas quando omitidas', async
   db.prepare('UPDATE carteiras SET rev = 1 WHERE usuario_id = ?').run(idAna);
 });
 
+test('cenários do simulador são salvos, validados e mantidos quando omitidos', async () => {
+  const { db } = require('../db');
+  const revAtual = () => db.prepare('SELECT rev FROM carteiras WHERE usuario_id = ?').get(idAna).rev;
+  const cen = { id: 'c1', nome: 'Aumento', base: 'media3', valores: { receita: 900000, cartao: -5, xyz: 1 }, tipos: { alimentacao: 20, foo: 10, lazer: 150 } };
+  let r = await ana('PUT', '/api/dados', { rev: revAtual(), lancamentos: [lanc('a1'), lanc('a2')], cenarios: [cen] });
+  assert.equal(r.status, 200);
+  let d = (await ana('GET', '/api/dados')).dados;
+  assert.deepEqual(d.cenarios[0].valores, { receita: 900000 });
+  assert.deepEqual(d.cenarios[0].tipos, { alimentacao: 20 });
+  assert.equal(d.cenarios[0].base, 'media3');
+  await ana('PUT', '/api/dados', { rev: revAtual(), lancamentos: [lanc('a1'), lanc('a2')] });
+  assert.equal((await ana('GET', '/api/dados')).dados.cenarios.length, 1);
+  assert.equal((await ana('PUT', '/api/dados', { rev: revAtual(), lancamentos: [], cenarios: [{ nome: ' ' }] })).status, 400);
+  assert.equal((await ana('PUT', '/api/dados', { rev: revAtual(), lancamentos: [], cenarios: 'x' })).status, 400);
+  db.prepare('UPDATE carteiras SET rev = 1 WHERE usuario_id = ?').run(idAna);
+});
+
 test('dados no formato antigo (só a lista) continuam legíveis', async () => {
   const { db } = require('../db');
   const antes = db.prepare('SELECT dados FROM carteiras WHERE usuario_id = ?').get(idAna).dados;

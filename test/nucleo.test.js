@@ -388,3 +388,55 @@ test('onde estou gastando: totais por tipo, sem tipo, cartões, parcelas futuras
   assert.deepEqual([soCartao.total, soCartao.tipos.length, soCartao.semTipo.qtd], [4000, 0, 1]);
   assert.equal(N.gastos(ls, 2026).evolucao, null);
 });
+
+test('simulador: base do mês ou média de 3 meses, cortes por tipo, projeção e metas', () => {
+  const ls = [];
+  for (const mes of [7, 8, 9]) {
+    ls.push(...N.gerar({ desc: 'Salário', centavos: 600000, categoria: 'receita', ano: 2026, mes, dia: 5 }));
+    ls.push(...N.gerar({ desc: 'Aluguel', centavos: 200000, categoria: 'fixa', ano: 2026, mes, dia: 5, tipoGasto: 'moradia' }));
+    ls.push(...N.gerar({ desc: 'iFood', centavos: mes === 9 ? 90000 : 30000, categoria: 'cartao', cartao: 'Nubank', ano: 2026, mes, dia: 9, tipoGasto: 'alimentacao' }));
+    ls.push(...N.gerar({ desc: 'Tesouro', centavos: 50000, categoria: 'investimento', ano: 2026, mes, dia: 25 }));
+  }
+  const b = N.baseSimulacao(ls, 2026, 9);
+  assert.equal(b.valores.cartao, 90000);
+  assert.equal(b.tipos[0].id, 'moradia');
+  const m3 = N.baseSimulacao(ls, 2026, 9, 'media3');
+  assert.equal(m3.valores.cartao, 50000);
+  assert.deepEqual(m3.meses.map((m) => m.mes), [7, 8, 9]);
+
+  const igual = N.simular(b);
+  assert.deepEqual(igual.valores, b.valores);
+  assert.equal(igual.hoje.saldo, 600000 - 200000 - 90000 - 50000);
+  assert.equal(igual.hoje.guardado, 310000);
+
+  const r = N.simular(b, { valores: { receita: 700000, investimento: 80000 }, tipos: { alimentacao: 50 } });
+  assert.equal(r.valores.cartao, 45000);
+  assert.equal(r.reducao.cartao, 45000);
+  assert.equal(r.simulado.receitas, 700000);
+  assert.equal(r.simulado.guardado, 700000 - 245000);
+  assert.equal(r.simulado.taxa, Math.round((80000 / 700000) * 100));
+  assert.equal(r.projecao.length, 12);
+  assert.deepEqual([r.projecao[0].ano, r.projecao[0].mes], [2026, 10]);
+  assert.equal(r.projecao[11].simulado, 455000 * 12);
+  // valor manual nunca fica negativo depois do corte por tipo
+  assert.equal(N.simular(b, { valores: { cartao: 10000 }, tipos: { alimentacao: 50 } }).valores.cartao, 0);
+
+  const plano = N.novoPlano({ titulo: 'Viagem' });
+  plano.meta = 1000000;
+  plano.linhas[0].valores[plano.colunas[0].id] = 100000;
+  const [meta] = N.impactoMetas([plano, N.novoPlano({ titulo: 'Sem meta' })], r, 2026, 9);
+  assert.equal(meta.falta, 900000);
+  assert.equal(meta.hoje.meses, Math.ceil(900000 / 310000));
+  assert.equal(meta.simulado.meses, Math.ceil(900000 / 455000));
+  assert.equal(meta.antes, 1);
+  assert.deepEqual(meta.simulado.quando, { ano: 2026, mes: 11 });
+  const neg = N.simular(b, { valores: { receita: 0 } });
+  assert.equal(N.impactoMetas([plano], neg, 2026, 9)[0].simulado.meses, null);
+
+  const c = N.limparCenario({ nome: '  Meu   cenário ', valores: { receita: 1.5, fixa: 100 }, tipos: { lazer: 0, saude: 30 } });
+  assert.equal(c.nome, 'Meu cenário');
+  assert.deepEqual(c.valores, { fixa: 100 });
+  assert.deepEqual(c.tipos, { saude: 30 });
+  assert.equal(c.base, 'mes');
+  assert.equal(N.limparCenario({ nome: '' }), null);
+});
