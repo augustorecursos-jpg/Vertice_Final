@@ -23,9 +23,10 @@ Regras de proteção:
 - **Prazo:** cada usuário tem **30 dias contados a partir do primeiro acesso**. Administradores não têm assinatura.
 - **Sinalização:** quando faltarem poucos dias (padrão: 5), o menu **Usuários** mostra um contador e a tela lista quem precisa de atenção. O contador inclui as assinaturas que vencem hoje e as vencidas.
 - **Aviso:** o ícone ✈ gera a mensagem padrão já preenchida com o nome, o vencimento e o valor. O texto pode ser ajustado antes de enviar, e o envio é por **WhatsApp** (no telefone cadastrado), **e-mail** (quando o login é um e-mail) ou copiando o texto.
-- **Renovou:** registra o pagamento e soma 30 dias. A contagem parte do vencimento atual, ou de hoje se a assinatura já venceu.
+- **Planos por período:** mensal (30 dias), trimestral (90), semestral (180) e anual (365), para pessoa física e para os planos de empresas (Essencial, Gestão e Grupo). Preços padrão de pessoa física: R$ 11,99 · R$ 32,97 · R$ 59,94 · R$ 107,88.
+- **Renovou:** abre a escolha do período pago e do valor recebido. Soma os dias do período a partir do vencimento atual, ou de hoje se a assinatura já venceu, e guarda o histórico de renovações. A lista de usuários mostra o período e o valor da última renovação.
 - **Ajustes:** o vencimento pode ser alterado à mão em "Editar".
-- **Configurações:** valor da mensalidade (padrão **R$ 11,99**), quantos dias antes avisar e o texto da mensagem. Campos automáticos do texto: `{nome}`, `{vencimento}`, `{prazo}` e `{valor}`.
+- **Configurações:** tabela de preços de cada plano e período (com valor por mês e desconto calculados na hora), quantos dias antes avisar e o texto da mensagem. Campos automáticos do texto: `{nome}`, `{vencimento}`, `{prazo}`, `{opcoes}` (lista dos períodos com preço e valor por mês, marcando o melhor preço), `{valor}` (preço mensal) e `{periodo}`.
 - **Bloqueio manual:** o sistema não bloqueia sozinho. Quem decide é você, com o botão de bloquear.
 
 **Privacidade:** o administrador gerencia contas, mas o sistema não mostra os lançamentos de ninguém. Nenhuma tela ou rota da API faz isso. A tela "Atividade recente" registra entradas e ações administrativas, sem valores financeiros.

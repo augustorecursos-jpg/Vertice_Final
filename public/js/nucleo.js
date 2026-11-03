@@ -641,6 +641,59 @@
     return '﻿' + linhas.join('\r\n');
   }
 
+  // ---------- planos de assinatura por período ----------
+  const PERIODOS = [
+    { id: 'mensal', nome: 'Mensal', dias: 30, meses: 1 },
+    { id: 'trimestral', nome: 'Trimestral', dias: 90, meses: 3 },
+    { id: 'semestral', nome: 'Semestral', dias: 180, meses: 6 },
+    { id: 'anual', nome: 'Anual', dias: 365, meses: 12 },
+  ];
+  const PERIODO = Object.fromEntries(PERIODOS.map((p) => [p.id, p]));
+  const PLANOS_ASSINATURA = [
+    { id: 'pf', nome: 'Pessoa física', det: '1 usuário · tudo incluído', usuarios: 1 },
+    { id: 'essencial', nome: 'Essencial', det: 'até 3 usuários', empresa: true, usuarios: 3 },
+    { id: 'gestao', nome: 'Gestão', det: 'até 8 usuários', empresa: true, usuarios: 8 },
+    { id: 'grupo', nome: 'Grupo', det: 'até 20 usuários', empresa: true, usuarios: 20 },
+  ];
+  const PLANO_ASSINATURA = Object.fromEntries(PLANOS_ASSINATURA.map((p) => [p.id, p]));
+  // Pessoa física com 8%, 17% e 25% de desconto; empresas com 5%, 10% e 15%.
+  const PRECOS_PADRAO = {
+    pf: { mensal: 1199, trimestral: 3297, semestral: 5994, anual: 10788 },
+    essencial: { mensal: 14900, trimestral: 42465, semestral: 80460, anual: 151980 },
+    gestao: { mensal: 29900, trimestral: 85215, semestral: 161460, anual: 304980 },
+    grupo: { mensal: 59000, trimestral: 168150, semestral: 318600, anual: 601800 },
+  };
+  const MAX_PRECO = 100000000;
+
+  /** Tabela completa de preços. Valores ausentes vêm da base; qualquer valor inválido recusa tudo (null). */
+  function limparPrecos(x, base = PRECOS_PADRAO) {
+    if (!x || typeof x !== 'object') return null;
+    const r = {};
+    for (const pl of PLANOS_ASSINATURA) {
+      r[pl.id] = {};
+      for (const pe of PERIODOS) {
+        const v = x[pl.id]?.[pe.id];
+        if (v === undefined) { r[pl.id][pe.id] = base[pl.id][pe.id]; continue; }
+        if (!Number.isInteger(v) || v <= 0 || v > MAX_PRECO) return null;
+        r[pl.id][pe.id] = v;
+      }
+    }
+    return r;
+  }
+
+  function precoPeriodo(precos, plano, periodo) {
+    const tabela = precos[plano] || precos.pf, pe = PERIODO[periodo] || PERIODO.mensal;
+    const total = tabela[pe.id], cheio = tabela.mensal * pe.meses;
+    return { total, porMes: Math.round(total / pe.meses), desconto: cheio > 0 ? Math.max(0, Math.round((1 - total / cheio) * 100)) : 0 };
+  }
+
+  /** Lista para a mensagem de aviso ({opcoes}). */
+  function opcoesAssinatura(precos, plano = 'pf') {
+    const itens = PERIODOS.map((pe) => ({ pe, ...precoPeriodo(precos, plano, pe.id) }));
+    const melhor = itens.reduce((a, b) => (b.porMes < a.porMes ? b : a));
+    return itens.map((i) => `• ${i.pe.nome}: ${moeda(i.total)}${i.pe.meses > 1 ? ` (${moeda(i.porMes)}/mês)` : ''}${i === melhor && i.pe.meses > 1 ? ' ← melhor preço' : ''}`).join('\n');
+  }
+
   // ---------- simulador ("e se…?") ----------
   // Nada aqui altera lançamentos: só calcula cenários a partir deles.
 
@@ -743,6 +796,7 @@
     LIMITES_PLANO, novoPlano, totaisPlano, limparPlano, csvPlano,
     CARTOES_SUGERIDOS, mesmoCartao, painel, detalhesCategoria, periodoAnterior, variacao,
     TIPOS_GASTO, TIPO, sugerirTipoGasto, gastos,
+    PERIODOS, PERIODO, PLANOS_ASSINATURA, PLANO_ASSINATURA, PRECOS_PADRAO, limparPrecos, precoPeriodo, opcoesAssinatura,
     MAX_CENARIOS, PCTS_TIPO, baseSimulacao, simular, impactoMetas, limparCenario,
     MAX_PROVISOES, gerarProvisoes, limparProvisao, consumoProvisoes, reservadoProvisoes,
     VERSAO_DADOS, CATEGORIAS, CAT, MESES, MESES_CURTOS,

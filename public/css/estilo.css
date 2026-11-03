@@ -167,6 +167,7 @@ label.rotulo small { font-weight: 400; }
 .tag.erro { background: var(--vermelho-100); color: var(--vermelho); }
 .tag.info { background: var(--claro-100); color: var(--marinho-800); }
 .tag.neutra { background: #edf1f5; color: var(--suave); }
+.tag.indigo { background: color-mix(in srgb, var(--indigo) 12%, white); color: var(--indigo); }
 .tag.indigo { background: var(--indigo-100); color: var(--indigo); }
 .txt-erro { color: var(--vermelho); font-weight: 700; }
 
@@ -622,6 +623,31 @@ code { background: var(--claro-100); color: var(--marinho-800); padding: .1em .4
 #toast > div.erro svg.ic { color: #fff; }
 #toast button { border: 0; background: rgba(255,255,255,.14); color: #fff; font: inherit; font-weight: 800; padding: .35em .8em; border-radius: 9px; cursor: pointer; }
 #toast button:hover { background: rgba(255,255,255,.24); }
+
+/* ---------- planos por período ---------- */
+.rolar-x { overflow-x: auto; max-width: 100%; -webkit-overflow-scrolling: touch; }
+table.precos { width: 100%; border-collapse: collapse; font-size: .9rem; min-width: 640px; }
+table.precos th { text-align: left; font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--suave); padding: .5em .5em; border-bottom: 1px solid var(--borda); }
+table.precos th small { display: block; text-transform: none; letter-spacing: 0; font-weight: 600; }
+table.precos tbody th { min-width: 150px; text-transform: none; letter-spacing: 0; font-size: .88rem; color: var(--marinho-900); font-weight: 400; }
+table.precos tbody th small { color: var(--suave); font-size: .76rem; }
+table.precos td { padding: .45em .4em; border-bottom: 1px solid #edf2f7; vertical-align: top; }
+table.precos td small { display: block; color: var(--suave); font-size: .74rem; margin-top: .2em; min-height: 1.2em; }
+.campo-valor.peq input { padding-top: .35em; padding-bottom: .35em; font-size: .9rem; text-align: right; }
+.eco { color: var(--verde); font-weight: 800; }
+fieldset.periodos { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: .6em; }
+fieldset.periodos legend { padding: 0; margin-bottom: .5em; }
+label.periodo { border: 2px solid var(--borda); border-radius: 14px; padding: .7em .7em .6em; position: relative; cursor: pointer; display: block; }
+label.periodo input { position: absolute; opacity: 0; pointer-events: none; }
+label.periodo:has(input:checked) { border-color: var(--primaria); background: var(--claro-50); box-shadow: 0 0 0 4px rgba(32,184,213,.18); }
+label.periodo:has(input:focus-visible) { outline: 2px solid var(--claro); outline-offset: 2px; }
+label.periodo b { display: block; font-family: var(--titulo); color: var(--marinho-900); font-size: .9rem; }
+label.periodo .v { display: block; font-family: var(--titulo); font-weight: 800; font-size: 1.05rem; color: var(--marinho-900); margin-top: .2em; white-space: nowrap; }
+label.periodo small { display: block; color: var(--suave); font-size: .74rem; }
+label.periodo .eco-tag { position: absolute; top: -.75em; right: .5em; background: var(--verde); color: #fff; font-size: .68rem; font-weight: 800; padding: .1em .5em; border-radius: 99px; }
+.resumo-renov { margin-top: 1em; background: var(--claro-50); border: 1px dashed var(--claro-300); border-radius: 12px; padding: .7em .9em; font-size: .88rem; color: var(--marinho-800); line-height: 1.5; }
+.resumo-renov svg.ic { vertical-align: -.15em; }
+@media (max-width: 640px) { fieldset.periodos { grid-template-columns: 1fr 1fr; gap: .9em .6em; } }
 
 /* ---------- simulador ---------- */
 .sim-cab .sim-acoes { gap: .5em; }

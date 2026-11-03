@@ -1782,7 +1782,8 @@
   const iniciais = (nome) => String(nome || '?').trim().split(/\s+/).filter((p) => !/^(da|de|do|das|dos|e)$/i.test(p)).map((p) => p[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
   let usuarios = [];
 
-  let configAssin = { mensalidade: 1199, diasAviso: 5, mensagem: '', mensagemPadrao: '' };
+  let configAssin = { mensalidade: 1199, precos: N.PRECOS_PADRAO, diasAviso: 5, mensagem: '', mensagemPadrao: '' };
+  const planoDe = (u) => (N.PLANO_ASSINATURA[u.plano] ? u.plano : 'pf');
   const dataBR = (iso) => (iso ? iso.split('-').reverse().join('/') : '');
   const precisaAtencao = (u) => u.ativo && ['aviso', 'hoje', 'vencida'].includes(u.assinatura?.cod);
 
@@ -1821,7 +1822,7 @@
           <span class="acoes-atencao"><button type="button" class="btn sec peq" data-usr="aviso" data-uid="${u.id}">${ic('mensagem')} Enviar aviso</button>
           <button type="button" class="btn sec peq" data-usr="renovar" data-uid="${u.id}">${ic('repetir')} Renovou</button></span></li>`).join('')}</ul></div></div>` : '';
 
-      corpo.innerHTML = `<thead><tr><th>Usuário</th><th>Situação</th><th>Assinatura</th><th class="esconder-cel">Último acesso</th><th></th></tr></thead><tbody>${lista.map((u) => {
+      corpo.innerHTML = `<thead><tr><th>Usuário</th><th>Situação</th><th>Plano e período</th><th>Assinatura</th><th class="esconder-cel">Último acesso</th><th></th></tr></thead><tbody>${lista.map((u) => {
         const souEu = u.id === eu.id;
         const assinante = u.perfil !== 'admin';
         return `<tr class="${u.ativo ? '' : 'inativo'} ${precisaAtencao(u) ? 'atencao' : ''}">
@@ -1829,11 +1830,12 @@
           <td>${!u.ativo ? `<span class="tag erro">${ic('cadeado')} Bloqueado</span>`
             : u.trocarSenha ? `<span class="tag aviso">${ic('relogio')} ${u.ultimoAcesso ? 'Senha temporária' : 'Aguardando 1º acesso'}</span>`
             : `<span class="tag ok">${ic('check')} Ativo</span>`}</td>
+          <td>${tagPlano(u)}</td>
           <td class="cel-assin">${tagAssinatura(u)}</td>
           <td class="esconder-cel">${u.ultimoAcesso ? esc(dataHora(u.ultimoAcesso)) : '<span class="suave">Nunca entrou</span>'}</td>
           <td class="acoes">
             ${assinante && u.assinaturaVence ? `<button type="button" class="btn fantasma icone peq aviso-msg" data-usr="aviso" data-uid="${u.id}" title="Enviar aviso de vencimento" aria-label="Enviar aviso de vencimento para ${esc(u.nome)}">${ic('mensagem')}</button>` : ''}
-            ${assinante ? `<button type="button" class="btn fantasma icone peq" data-usr="renovar" data-uid="${u.id}" title="Renovar +30 dias" aria-label="Renovar assinatura de ${esc(u.nome)} por 30 dias">${ic('repetir')}</button>` : ''}
+            ${assinante ? `<button type="button" class="btn fantasma icone peq" data-usr="renovar" data-uid="${u.id}" title="Renovou" aria-label="Registrar renovação de ${esc(u.nome)}">${ic('repetir')}</button>` : ''}
             <button type="button" class="btn fantasma icone peq" data-usr="editar" data-uid="${u.id}" title="Editar" aria-label="Editar ${esc(u.nome)}">${ic('editar')}</button>
             ${souEu ? '' : `
             <button type="button" class="btn fantasma icone peq" data-usr="senha" data-uid="${u.id}" title="Redefinir senha" aria-label="Redefinir senha de ${esc(u.nome)}">${ic('chave')}</button>
@@ -1843,7 +1845,7 @@
       }).join('')}</tbody>`;
 
       if (!$('#cfg-assin').contains(document.activeElement)) {
-        $('#cfg-valor').value = N.valorParaCampo(cfg.mensalidade);
+        desenharPrecos(cfg.precos);
         $('#cfg-dias').value = cfg.diasAviso;
         $('#cfg-msg').value = cfg.mensagem;
       }
@@ -1855,15 +1857,50 @@
     }
   }
 
+  function tagPlano(u) {
+    if (u.perfil === 'admin') return '<span class="suave">—</span>';
+    const pl = N.PLANO_ASSINATURA[planoDe(u)], pe = N.PERIODO[u.periodo] || N.PERIODO.mensal;
+    const valor = u.ultimoValor != null ? u.ultimoValor : N.precoPeriodo(configAssin.precos, pl.id, pe.id).total;
+    return `<span class="tag ${pl.empresa ? 'indigo' : 'info'}">${pl.empresa ? `${esc(pl.nome)} · ` : ''}${esc(pe.nome)} · ${moeda(valor)}</span>${u.ultimaRenovacao ? `<small class="venc-data">renovou em ${dataBR(u.ultimaRenovacao)}</small>` : ''}`;
+  }
+
+  // Tabela editável de preços (planos × períodos), com valor por mês e desconto calculados na hora.
+  function desenharPrecos(precos) {
+    const celula = (pl, pe) => `<td><span class="campo-valor peq"><span>R$</span><input type="text" inputmode="decimal" data-preco="${pl.id}|${pe.id}" value="${N.valorParaCampo(precos[pl.id][pe.id])}" aria-label="${esc(pl.nome)} ${esc(pe.nome)}"></span><small data-preco-info="${pl.id}|${pe.id}"></small></td>`;
+    $('#cfg-precos').innerHTML = `<thead><tr><th scope="col">Plano</th>${N.PERIODOS.map((pe) => `<th scope="col">${esc(pe.nome)}<small>${pe.dias} dias</small></th>`).join('')}</tr></thead>
+      <tbody>${N.PLANOS_ASSINATURA.map((pl) => `<tr><th scope="row"><b>${pl.empresa ? `Empresas · ${esc(pl.nome)}` : esc(pl.nome)}</b><small>${esc(pl.det)}</small></th>${N.PERIODOS.map((pe) => celula(pl, pe)).join('')}</tr>`).join('')}</tbody>`;
+    infoPrecos();
+  }
+  function lerPrecos() {
+    const r = {};
+    for (const i of $$('#cfg-precos [data-preco]')) {
+      const [pl, pe] = i.dataset.preco.split('|');
+      (r[pl] ||= {})[pe] = N.lerValor(i.value);
+    }
+    return r;
+  }
+  function infoPrecos() {
+    const precos = lerPrecos();
+    for (const el of $$('#cfg-precos [data-preco-info]')) {
+      const [pl, pe] = el.dataset.precoInfo.split('|');
+      const ok = Object.values(precos[pl]).every((v) => v > 0);
+      if (!ok) { el.innerHTML = precos[pl][pe] > 0 ? '' : '<span class="txt-erro">valor inválido</span>'; continue; }
+      const p = N.precoPeriodo(precos, pl, pe);
+      el.innerHTML = pe === 'mensal' ? 'por mês' : `${moeda(p.porMes)}/mês${p.desconto ? ` · <span class="eco">−${p.desconto}%</span>` : ''}`;
+    }
+  }
+
   /** Preenche a mensagem padrão com os dados do usuário. */
-  function montarMensagem(u, modelo = configAssin.mensagem) {
+  function montarMensagem(u, modelo = configAssin.mensagem, precos = configAssin.precos) {
     const a = u.assinatura || {};
     const prazo = a.cod === 'vencida' ? `venceu há ${-a.dias} ${a.dias === -1 ? 'dia' : 'dias'}`
       : a.cod === 'hoje' ? 'hoje' : a.dias === 1 ? 'amanhã' : `daqui a ${a.dias} dias`;
+    const plano = planoDe(u);
     const valores = {
-      nome: String(u.nome || '').trim().split(/\s+/)[0], vencimento: dataBR(u.assinaturaVence), prazo, valor: moeda(configAssin.mensalidade),
+      nome: String(u.nome || '').trim().split(/\s+/)[0], vencimento: dataBR(u.assinaturaVence), prazo, valor: moeda(precos[plano].mensal),
+      opcoes: N.opcoesAssinatura(precos, plano), periodo: (N.PERIODO[u.periodo] || N.PERIODO.mensal).nome.toLowerCase(),
     };
-    return modelo.replace(/\{(nome|vencimento|prazo|valor)\}/g, (_, k) => valores[k]);
+    return modelo.replace(/\{(nome|vencimento|prazo|valor|opcoes|periodo)\}/g, (_, k) => valores[k]);
   }
 
   function enviarAviso(u) {
@@ -1874,9 +1911,9 @@
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="t-aviso">
         <div class="cab-modal"><h2 id="t-aviso">Aviso de vencimento</h2>
           <button type="button" class="btn fantasma icone" data-fechar aria-label="Fechar"><i data-ic="x"></i></button></div>
-        <p style="margin-top:0">Para <b>${esc(u.nome)}</b> · assinatura ${u.assinatura.cod === 'vencida' ? 'venceu' : 'vence'} em <b>${dataBR(u.assinaturaVence)}</b> · mensalidade <b>${moeda(configAssin.mensalidade)}</b></p>
+        <p style="margin-top:0">Para <b>${esc(u.nome)}</b> · assinatura ${u.assinatura.cod === 'vencida' ? 'venceu' : 'vence'} em <b>${dataBR(u.assinaturaVence)}</b> · plano atual ${tagPlano(u)}</p>
         <label class="rotulo" for="aviso-texto">Mensagem <small>(pode ajustar antes de enviar)</small></label>
-        <textarea id="aviso-texto" rows="9">${esc(montarMensagem(u))}</textarea>
+        <textarea id="aviso-texto" rows="12">${esc(montarMensagem(u))}</textarea>
         <div class="canais">
           <button type="button" class="btn whats" data-canal="whatsapp">${ic('mensagem')} WhatsApp${tel ? '' : ' (escolher contato)'}</button>
           ${email ? `<button type="button" class="btn sec" data-canal="email">${ic('email')} E-mail</button>` : ''}
@@ -1907,24 +1944,24 @@
     const form = $('#cfg-assin');
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const mensalidade = N.lerValor($('#cfg-valor').value);
-      if (!(mensalidade > 0)) return toast('Informe o valor da mensalidade, por exemplo 11,99.', { erro: true });
+      const precos = lerPrecos();
+      const ruim = $$('#cfg-precos [data-preco]').find((i) => !(N.lerValor(i.value) > 0));
+      if (ruim) { ruim.focus(); return toast('Confira os preços: todos precisam ser maiores que zero, por exemplo 11,99.', { erro: true }); }
       try {
         configAssin = { ...configAssin, ...(await api('PUT', '/api/admin/config', {
-          mensalidade, diasAviso: Math.floor(+$('#cfg-dias').value), mensagem: $('#cfg-msg').value,
+          precos, diasAviso: Math.floor(+$('#cfg-dias').value), mensagem: $('#cfg-msg').value,
         })) };
         toast('Configurações de assinatura salvas.');
         renderUsuarios();
       } catch (er) { toast(er.message, { erro: true }); }
     });
+    $('#cfg-precos').addEventListener('input', infoPrecos);
+    $('#cfg-precos').addEventListener('change', (e) => { const i = e.target.closest('[data-preco]'); const v = i && N.lerValor(i.value); if (v > 0) i.value = N.valorParaCampo(v); });
     $('#cfg-padrao').addEventListener('click', () => { $('#cfg-msg').value = configAssin.mensagemPadrao; $('#cfg-msg').focus(); });
     $('#cfg-previa').addEventListener('click', () => {
-      const exemplo = { nome: 'Maria Clara', assinaturaVence: new Date(Date.now() + 3 * 864e5).toLocaleDateString('sv-SE'), assinatura: { cod: 'aviso', dias: 3 } };
-      const mensalidade = N.lerValor($('#cfg-valor').value);
-      const antes = configAssin.mensalidade;
-      if (mensalidade > 0) configAssin.mensalidade = mensalidade;
-      const txt = montarMensagem(exemplo, $('#cfg-msg').value);
-      configAssin.mensalidade = antes;
+      const exemplo = { nome: 'Maria Clara', plano: 'pf', periodo: 'mensal', assinaturaVence: new Date(Date.now() + 3 * 864e5).toLocaleDateString('sv-SE'), assinatura: { cod: 'aviso', dias: 3 } };
+      const precos = N.limparPrecos(lerPrecos()) || configAssin.precos;
+      const txt = montarMensagem(exemplo, $('#cfg-msg').value, precos);
       abrirModal(`<div class="modal" role="dialog" aria-modal="true" aria-labelledby="t-previa"><div class="cab-modal"><h2 id="t-previa">Prévia da mensagem</h2>
         <button type="button" class="btn fantasma icone" data-fechar aria-label="Fechar"><i data-ic="x"></i></button></div>
         <div class="previa-msg">${esc(txt)}</div><div class="rodape-modal"><button type="button" class="btn" data-fechar>Fechar</button></div></div>`, { estreito: true });
@@ -1945,6 +1982,54 @@
     $('[data-copiar]', modal).addEventListener('click', async () => {
       const txt = `Seu acesso ao Vértice\nEndereço: ${location.origin}\nLogin: ${u.login}\nSenha temporária: ${senha}`;
       try { await navigator.clipboard.writeText(txt); toast('Acesso copiado.'); } catch { toast('Não foi possível copiar. Selecione e copie a senha.', { erro: true }); }
+    });
+  }
+
+  function renovarAssinatura(u) {
+    const plano = planoDe(u), pl = N.PLANO_ASSINATURA[plano];
+    const hoje = new Date().toLocaleDateString('sv-SE');
+    const base = u.assinaturaVence && u.assinaturaVence > hoje ? u.assinaturaVence : hoje;
+    const somar = (iso, dias) => { const d = new Date(`${iso}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + dias); return d.toISOString().slice(0, 10); };
+    const inicial = N.PERIODO[u.periodo] ? u.periodo : 'mensal';
+    const { modal, fechar } = abrirModal(`
+      <form class="modal" role="dialog" aria-modal="true" aria-labelledby="t-renov" novalidate>
+        <div class="cab-modal"><h2 id="t-renov">Renovar assinatura</h2><button type="button" class="btn fantasma icone" data-fechar aria-label="Fechar"><i data-ic="x"></i></button></div>
+        <p class="suave" style="margin-top:0"><b>${esc(u.nome)}</b> · ${esc(pl.empresa ? `Empresas · ${pl.nome}` : pl.nome)} · ${u.assinaturaVence ? `${u.assinatura?.cod === 'vencida' ? 'venceu' : 'vence'} em ${dataBR(u.assinaturaVence)}` : 'ainda não começou'}</p>
+        <fieldset class="periodos"><legend class="rotulo">Período pago</legend>
+          ${N.PERIODOS.map((pe) => {
+            const p = N.precoPeriodo(configAssin.precos, plano, pe.id);
+            return `<label class="periodo">${p.desconto ? `<span class="eco-tag">−${p.desconto}%</span>` : ''}<input type="radio" name="periodo" value="${pe.id}" ${pe.id === inicial ? 'checked' : ''}>
+              <b>${esc(pe.nome)}</b><span class="v">${moeda(p.total)}</span><small>${pe.meses > 1 ? `${moeda(p.porMes)}/mês` : `+${pe.dias} dias`}</small></label>`;
+          }).join('')}
+        </fieldset>
+        <div class="grade-form" style="margin-top:.9em"><div><label class="rotulo" for="renov-valor">Valor recebido</label>
+          <div class="campo-valor"><span>R$</span><input type="text" id="renov-valor" inputmode="decimal"></div></div></div>
+        <div class="resumo-renov" id="renov-resumo"></div>
+        <p class="erro-campo" id="renov-erro" role="alert"></p>
+        <div class="rodape-modal"><button type="button" class="btn sec" data-fechar>Cancelar</button><button class="btn">${ic('check')} Confirmar renovação</button></div>
+      </form>`);
+    const periodo = () => $('input[name=periodo]:checked', modal).value;
+    const atualizar = (trocouPeriodo) => {
+      const pe = N.PERIODO[periodo()];
+      if (trocouPeriodo) $('#renov-valor', modal).value = N.valorParaCampo(N.precoPeriodo(configAssin.precos, plano, pe.id).total);
+      const v = N.lerValor($('#renov-valor', modal).value);
+      $('#renov-resumo', modal).innerHTML = `${ic('calendario')} Nova validade: <b>${dataBR(base)} → ${dataBR(somar(base, pe.dias))}</b> (${pe.dias} dias contados ${base === hoje ? 'a partir de hoje' : 'a partir do vencimento atual'}) · valor registrado <b>${Number.isInteger(v) && v >= 0 ? moeda(v) : '—'}</b>`;
+    };
+    atualizar(true);
+    modal.addEventListener('change', (e) => { if (e.target.name === 'periodo') atualizar(true); });
+    $('#renov-valor', modal).addEventListener('input', () => atualizar(false));
+    modal.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const valor = N.lerValor($('#renov-valor', modal).value);
+      if (!(Number.isInteger(valor) && valor >= 0)) { $('#renov-erro', modal).textContent = 'Informe o valor recebido, por exemplo 59,94.'; return; }
+      try {
+        const r = await api('POST', `/api/admin/usuarios/${u.id}/renovar`, { periodo: periodo(), valor });
+        fechar();
+        const pe = N.PERIODO[r.periodo].nome.toLowerCase();
+        if (!u.ativo) toast(`Renovada (${pe}) até ${dataBR(r.assinaturaVence)}. O acesso continua bloqueado: use “Desbloquear”.`, { tempo: 8000 });
+        else toast(`Assinatura ${pe} renovada até ${dataBR(r.assinaturaVence)}.`);
+        renderUsuarios();
+      } catch (er) { $('#renov-erro', modal).textContent = er.message; }
     });
   }
 
@@ -2001,17 +2086,7 @@
     try {
       if (acao === 'editar') return formUsuario(u);
       if (acao === 'aviso') return enviarAviso(u);
-      if (acao === 'renovar') {
-        const hoje = new Date().toLocaleDateString('sv-SE');
-        const base = u.assinaturaVence && u.assinaturaVence > hoje ? u.assinaturaVence : hoje;
-        const ok = await confirmar({ titulo: 'Confirmar renovação?', botao: 'Renovar +30 dias',
-          texto: `Registrar que <b>${esc(u.nome)}</b> pagou a mensalidade de <b>${moeda(configAssin.mensalidade)}</b>. A assinatura passa a valer 30 dias a partir de ${base === hoje ? 'hoje' : dataBR(base)}.` });
-        if (!ok) return;
-        const r = await api('POST', `/api/admin/usuarios/${id}/renovar`, {});
-        if (!u.ativo) toast(`Renovada até ${dataBR(r.assinaturaVence)}. O acesso continua bloqueado: use “Desbloquear”.`, { tempo: 8000 });
-        else toast(`Assinatura renovada até ${dataBR(r.assinaturaVence)}.`);
-        return renderUsuarios();
-      }
+      if (acao === 'renovar') return renovarAssinatura(u);
       if (acao === 'senha') {
         const ok = await confirmar({ titulo: 'Redefinir senha?', botao: 'Gerar senha temporária',
           texto: `<b>${esc(u.nome)}</b> sai de todos os dispositivos e só entra de novo com a senha temporária que vamos gerar agora.` });

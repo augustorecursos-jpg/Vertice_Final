@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { DatabaseSync } = require('node:sqlite');
+const N = require('./public/js/nucleo.js');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -47,6 +48,17 @@ CREATE TABLE IF NOT EXISTS config (
   chave TEXT PRIMARY KEY,
   valor TEXT
 );
+
+CREATE TABLE IF NOT EXISTS renovacoes (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  usuario_id INTEGER NOT NULL,
+  periodo    TEXT NOT NULL,
+  centavos   INTEGER NOT NULL,
+  de         TEXT NOT NULL,
+  ate        TEXT NOT NULL,
+  criado_em  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_renovacoes_usuario ON renovacoes(usuario_id);
 `);
 
 // Migrações: colunas novas em bancos já existentes.
@@ -54,7 +66,11 @@ const colunas = new Set(db.prepare('PRAGMA table_info(usuarios)').all().map((c) 
 for (const [nome, def] of [
   ['telefone', 'TEXT'],              // para o aviso por WhatsApp
   ['assinatura_inicio', 'TEXT'],     // AAAA-MM-DD do primeiro acesso
-  ['assinatura_vence', 'TEXT'],      // AAAA-MM-DD; renovar soma 30 dias
+  ['assinatura_vence', 'TEXT'],      // AAAA-MM-DD; renovar soma os dias do período
+  ['plano', "TEXT NOT NULL DEFAULT 'pf'"], // pf | essencial | gestao | grupo
+  ['periodo', "TEXT NOT NULL DEFAULT 'mensal'"], // período da última renovação
+  ['ultimo_valor', 'INTEGER'],       // centavos pagos na última renovação
+  ['ultima_renovacao', 'TEXT'],      // AAAA-MM-DD
 ]) {
   if (!colunas.has(nome)) db.exec(`ALTER TABLE usuarios ADD COLUMN ${nome} ${def}`);
 }
@@ -63,12 +79,19 @@ for (const [nome, def] of [
 const CONFIG_PADRAO = {
   mensalidade_centavos: '1199',
   dias_aviso: '5',
-  mensagem_aviso: 'Olá, {nome}! Tudo bem?\n\nSua assinatura do Vértice vence em {vencimento} ({prazo}). Deseja renovar o plano?\n\nA mensalidade é de {valor} e garante mais 30 dias de acesso a lançamentos, visão anual e planejamentos.\n\nÉ só responder esta mensagem que eu envio os dados para pagamento.\n\nAR Consultoria',
+  mensagem_aviso: 'Olá, {nome}! Tudo bem?\n\nSua assinatura do Vértice vence em {vencimento} ({prazo}). Deseja renovar?\n\nEscolha o plano que preferir:\n{opcoes}\n\nÉ só responder com o plano escolhido que eu envio os dados para pagamento.\n\nAR Consultoria',
+  precos_planos: JSON.stringify(N.PRECOS_PADRAO),
 };
 function lerConfig() {
   const cfg = { ...CONFIG_PADRAO };
-  for (const r of db.prepare('SELECT chave, valor FROM config').all()) if (r.chave in cfg) cfg[r.chave] = r.valor;
-  return { mensalidade: Number(cfg.mensalidade_centavos), diasAviso: Number(cfg.dias_aviso), mensagem: cfg.mensagem_aviso };
+  const gravadas = new Set();
+  for (const r of db.prepare('SELECT chave, valor FROM config').all()) if (r.chave in cfg) { cfg[r.chave] = r.valor; gravadas.add(r.chave); }
+  let precos = null;
+  try { precos = N.limparPrecos(JSON.parse(cfg.precos_planos)); } catch { /* usa o padrão */ }
+  precos ||= structuredClone(N.PRECOS_PADRAO);
+  // Bancos antigos só tinham a mensalidade: ela vira o preço mensal de pessoa física.
+  if (!gravadas.has('precos_planos') && gravadas.has('mensalidade_centavos')) precos.pf.mensal = Number(cfg.mensalidade_centavos);
+  return { mensalidade: precos.pf.mensal, precos, diasAviso: Number(cfg.dias_aviso), mensagem: cfg.mensagem_aviso };
 }
 function gravarConfig(chave, valor) {
   db.prepare('INSERT INTO config (chave, valor) VALUES (?, ?) ON CONFLICT (chave) DO UPDATE SET valor = excluded.valor').run(chave, String(valor));

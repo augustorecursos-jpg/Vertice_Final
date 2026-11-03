@@ -126,7 +126,8 @@ const publico = (u) => ({
 const telefoneValido = (v) => { const d = String(v || '').replace(/\D/g, ''); return d.length >= 10 && d.length <= 13 ? d : null; };
 const paraAdmin = (u, diasAviso) => ({
   ...publico(u), telefone: u.telefone || '', assinaturaInicio: u.assinatura_inicio, assinaturaVence: u.assinatura_vence,
-  assinatura: situacaoAssinatura(u, diasAviso),
+  assinatura: situacaoAssinatura(u, diasAviso), plano: N.PLANO_ASSINATURA[u.plano] ? u.plano : 'pf',
+  periodo: N.PERIODO[u.periodo] ? u.periodo : 'mensal', ultimoValor: u.ultimo_valor ?? null, ultimaRenovacao: u.ultima_renovacao || null,
 });
 
 function transacao(fn) {
@@ -346,31 +347,51 @@ app.put('/api/admin/usuarios/:id', exigirAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-/** Renova por mais 30 dias: a partir do vencimento atual, ou de hoje se já venceu (ou nunca começou). */
+/**
+ * Renova pelo período pago (mensal 30, trimestral 90, semestral 180, anual 365 dias),
+ * a partir do vencimento atual, ou de hoje se já venceu (ou nunca começou). Registra o valor pago.
+ */
 app.post('/api/admin/usuarios/:id/renovar', exigirAdmin, (req, res) => {
   const u = buscarAlvo(req, res);
   if (!u) return;
   if (u.perfil === 'admin') return res.status(400).json({ erro: 'Administradores não têm assinatura.' });
+  const periodo = req.body?.periodo ?? 'mensal';
+  if (!N.PERIODO[periodo]) return res.status(400).json({ erro: 'Período inválido.' });
+  const plano = N.PLANO_ASSINATURA[u.plano] ? u.plano : 'pf';
+  let valor = req.body?.valor;
+  if (valor === undefined || valor === null) valor = N.precoPeriodo(lerConfig().precos, plano, periodo).total;
+  if (!Number.isInteger(valor) || valor < 0 || valor > 100000000) return res.status(400).json({ erro: 'Valor pago inválido.' });
   const hoje = hojeISO();
   const base = u.assinatura_vence && u.assinatura_vence > hoje ? u.assinatura_vence : hoje;
-  const vence = somarDias(base, DIAS_ASSINATURA);
-  db.prepare('UPDATE usuarios SET assinatura_vence = ?, assinatura_inicio = COALESCE(assinatura_inicio, ?) WHERE id = ?').run(vence, hoje, u.id);
-  auditar(req, 'renovou assinatura', `${u.login}: até ${vence.split('-').reverse().join('/')}`);
-  res.json({ assinaturaVence: vence });
+  const vence = somarDias(base, N.PERIODO[periodo].dias);
+  transacao(() => {
+    db.prepare(`UPDATE usuarios SET assinatura_vence = ?, assinatura_inicio = COALESCE(assinatura_inicio, ?), periodo = ?, ultimo_valor = ?, ultima_renovacao = ?
+      WHERE id = ?`).run(vence, hoje, periodo, valor, hoje, u.id);
+    db.prepare('INSERT INTO renovacoes (usuario_id, periodo, centavos, de, ate) VALUES (?, ?, ?, ?, ?)').run(u.id, periodo, valor, base, vence);
+  });
+  auditar(req, 'renovou assinatura', `${u.login}: ${N.PERIODO[periodo].nome} · ${N.moeda(valor)} · até ${vence.split('-').reverse().join('/')}`);
+  res.json({ assinaturaVence: vence, periodo, valor });
 });
 
 app.get('/api/admin/config', exigirAdmin, (req, res) => res.json({ ...lerConfig(), mensagemPadrao: CONFIG_PADRAO.mensagem_aviso }));
 
 app.put('/api/admin/config', exigirAdmin, (req, res) => {
-  const { mensalidade, diasAviso, mensagem } = req.body || {};
+  const { mensalidade, diasAviso, mensagem, precos } = req.body || {};
   if (mensalidade !== undefined && !(Number.isInteger(mensalidade) && mensalidade > 0 && mensalidade <= 10000000)) {
     return res.status(400).json({ erro: 'Valor da mensalidade inválido.' });
   }
+  const atuais = lerConfig().precos;
+  const novosPrecos = precos === undefined ? null : N.limparPrecos(precos, atuais);
+  if (precos !== undefined && !novosPrecos) return res.status(400).json({ erro: 'Há preços inválidos na tabela de planos.' });
   if (diasAviso !== undefined && !(Number.isInteger(diasAviso) && diasAviso >= 1 && diasAviso <= 30)) {
     return res.status(400).json({ erro: 'Os dias de aviso devem ficar entre 1 e 30.' });
   }
   if (mensagem !== undefined && !String(mensagem).trim()) return res.status(400).json({ erro: 'A mensagem não pode ficar vazia.' });
-  if (mensalidade !== undefined) gravarConfig('mensalidade_centavos', mensalidade);
+  if (novosPrecos || mensalidade !== undefined) {
+    const tabela = novosPrecos || atuais;
+    if (mensalidade !== undefined) tabela.pf.mensal = mensalidade;
+    gravarConfig('precos_planos', JSON.stringify(tabela));
+  }
   if (diasAviso !== undefined) gravarConfig('dias_aviso', diasAviso);
   if (mensagem !== undefined) gravarConfig('mensagem_aviso', String(mensagem).replace(/\r/g, '').trim().slice(0, 2000));
   auditar(req, 'alterou as configurações de assinatura');
@@ -396,6 +417,7 @@ app.delete('/api/admin/usuarios/:id', exigirAdmin, (req, res) => {
   if (String(req.body?.confirmar || '').toLowerCase() !== u.login.toLowerCase()) {
     return res.status(400).json({ erro: 'Confirme digitando o login do usuário.' });
   }
+  db.prepare('DELETE FROM renovacoes WHERE usuario_id = ?').run(u.id);
   db.prepare('DELETE FROM usuarios WHERE id = ?').run(u.id); // a carteira cai junto (ON DELETE CASCADE)
   auditar(req, 'excluiu usuário', u.login);
   res.json({ ok: true });

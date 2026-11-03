@@ -440,3 +440,20 @@ test('simulador: base do mês ou média de 3 meses, cortes por tipo, projeção 
   assert.equal(c.base, 'mes');
   assert.equal(N.limparCenario({ nome: '' }), null);
 });
+
+test('planos por período: preços, descontos e opções da mensagem', () => {
+  const P = N.PRECOS_PADRAO;
+  assert.deepEqual(N.precoPeriodo(P, 'pf', 'semestral'), { total: 5994, porMes: 999, desconto: 17 });
+  assert.equal(N.precoPeriodo(P, 'gestao', 'anual').desconto, 15);
+  assert.equal(N.precoPeriodo(P, 'pf', 'mensal').desconto, 0);
+  const txt = N.opcoesAssinatura(P, 'pf');
+  const linhas = txt.split('\n');
+  assert.equal(linhas.length, 4);
+  assert.match(linhas[0], /^• Mensal: R\$\s11,99$/);
+  assert.match(linhas[3], /Anual: R\$\s107,88 \(R\$\s8,99\/mês\) ← melhor preço/);
+  assert.equal(txt.match(/melhor preço/g).length, 1);
+  assert.equal(N.limparPrecos({ pf: { mensal: -1 } }), null);
+  assert.equal(N.limparPrecos({ pf: { mensal: 1500 } }).pf.mensal, 1500);
+  assert.equal(N.limparPrecos({}).grupo.anual, 601800);
+  assert.deepEqual(N.PERIODOS.map((p) => p.dias), [30, 90, 180, 365]);
+});

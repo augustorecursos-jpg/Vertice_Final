@@ -198,19 +198,20 @@
         <div class="cartao">
           <div class="cartao-cab">
             <div>
-              <h2><span class="bolha verde"><i data-ic="dinheiro"></i></span> Assinaturas</h2>
-              <p>Cada usuário tem 30 dias a partir do primeiro acesso. Renovar soma mais 30 dias.</p>
+              <h2><span class="bolha verde"><i data-ic="dinheiro"></i></span> Planos, preços e avisos</h2>
+              <p>Cada usuário tem 30 dias a partir do primeiro acesso. Ao renovar, você escolhe o período pago: mensal (30 dias), trimestral (90), semestral (180) ou anual (365).</p>
             </div>
           </div>
           <form id="cfg-assin" class="grade-form" autocomplete="off">
-            <div><label class="rotulo" for="cfg-valor">Valor da mensalidade</label>
-              <div class="campo-valor"><span>R$</span><input type="text" id="cfg-valor" inputmode="decimal" placeholder="11,99"></div></div>
+            <div class="inteiro" style="min-width:0"><span class="rotulo">Preço total de cada período</span>
+              <div class="rolar-x"><table class="precos" id="cfg-precos"></table></div>
+              <p class="dica">O desconto é calculado sobre o preço mensal × meses. Os planos de empresas valem para as contas de empresa.</p></div>
             <div><label class="rotulo" for="cfg-dias">Avisar quando faltarem <small>(dias)</small></label>
               <input type="number" id="cfg-dias" min="1" max="30" inputmode="numeric"></div>
             <div class="inteiro">
               <label class="rotulo" for="cfg-msg">Mensagem padrão de aviso</label>
               <textarea id="cfg-msg" rows="8" maxlength="2000"></textarea>
-              <p class="dica">Campos automáticos: <code>{nome}</code> primeiro nome · <code>{vencimento}</code> data · <code>{prazo}</code> “daqui a 3 dias”, “hoje”… · <code>{valor}</code> mensalidade.</p>
+              <p class="dica">Campos automáticos: <code>{nome}</code> primeiro nome · <code>{vencimento}</code> data · <code>{prazo}</code> “daqui a 3 dias”, “hoje”… · <code>{opcoes}</code> lista dos períodos com preço e valor por mês · <code>{valor}</code> preço mensal · <code>{periodo}</code> período atual da pessoa.</p>
             </div>
             <div class="inteiro linha fim">
               <button type="button" class="btn fantasma" id="cfg-padrao">Restaurar texto padrão</button>
@@ -223,7 +224,7 @@
           <div class="cartao-cab">
             <div>
               <h2><span class="bolha ciano"><i data-ic="relogio"></i></span> Atividade recente</h2>
-              <p>Entradas e ações administrativas. Valores financeiros não são registrados.</p>
+              <p>Entradas e ações administrativas. Os lançamentos dos usuários nunca aparecem aqui.</p>
             </div>
           </div>
           <ul class="lista-auditoria" id="auditoria"></ul>
