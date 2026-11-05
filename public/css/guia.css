@@ -27,6 +27,7 @@ kbd { font-family: inherit; font-size: .85em; font-weight: 700; background: var(
 /* ---------- páginas ---------- */
 .barra-web { position: sticky; top: 0; z-index: 5; display: flex; justify-content: space-between; align-items: center; gap: 1em; padding: .7em 1.2em; background: rgba(233, 238, 244, .9); backdrop-filter: blur(8px); }
 .barra-web a { text-decoration: none; font-weight: 800; }
+.barra-web .outros { display: flex; align-items: center; gap: 1.1em; flex-wrap: wrap; justify-content: flex-end; }
 .barra-web .baixar { background: linear-gradient(180deg, var(--primaria), var(--marinho-700)); color: #fff; padding: .55em 1em; border-radius: 10px; }
 .pagina {
   position: relative; width: 210mm; min-height: 297mm; margin: 0 auto 10mm; padding: 20mm 19mm 22mm; background: #fff;
@@ -113,6 +114,10 @@ table.tab td:first-child { white-space: nowrap; font-weight: 700; color: var(--m
 
 /* ---------- tela (fora do PDF) ---------- */
 @media screen and (max-width: 860px) {
+  .barra-web { font-size: .82rem; padding: .6em .8em; }
+  .barra-web a { white-space: nowrap; }
+  .barra-web .outros { gap: .7em; }
+  .barra-web .baixar { padding: .45em .8em; }
   body { font-size: 10.5pt; }
   .pagina { width: auto; min-height: 0; margin: 0 0 12px; padding: 28px 18px 60px; box-shadow: none; }
   .capa { min-height: 92vh; padding: 32px 22px; }

@@ -1007,6 +1007,11 @@ input[type=password] { font: inherit; color: inherit; background: var(--papel); 
 .login form { display: grid; gap: 1em; margin-top: 1.6em; background: var(--papel); border: 1px solid var(--borda); border-radius: 20px; padding: 1.6em; box-shadow: var(--sombra-3); }
 .login form .btn { padding: .8em; font-size: 1rem; }
 .login .erro { color: var(--vermelho); font-size: .9rem; font-weight: 700; min-height: 1.2em; margin: 0; }
+.login .guias-login { margin-top: 1.4em; border: 1px solid var(--borda); border-radius: 14px; padding: .8em 1em; background: var(--claro-50); display: grid; gap: .45em; font-size: .86rem; }
+.login .guias-login .rot { font-weight: 800; color: var(--marinho-900); font-size: .84rem; }
+.login .guia-op { display: flex; justify-content: space-between; align-items: center; gap: .8em; flex-wrap: wrap; }
+.login .guia-op b { color: var(--marinho-800); }
+.login .guia-op a { font-weight: 700; }
 .login .rodape-login { text-align: center; font-size: .8rem; color: var(--suave); margin-top: 1.4em; line-height: 1.6; }
 @media (max-width: 860px) {
   .login { grid-template-columns: 1fr; }
