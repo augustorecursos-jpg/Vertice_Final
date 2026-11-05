@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#17397d">
+  <title>Guia do Vértice Empresas · Como usar o app</title>
+  <meta name="description" content="Guia passo a passo do Vértice Empresas: papéis, contas a pagar e receber, orçamento, orçado × realizado, DRE, fluxo de caixa e equipe.">
+  <link rel="icon" href="img/icone.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/guia.css">
+  <style>
+    .papeis-g { display: grid; grid-template-columns: 1fr 1fr; gap: 3.5mm; margin: .6em 0 1em; }
+    .papeis-g div { border: 1px solid var(--borda); border-radius: 12px; padding: 3mm 3.5mm; background: linear-gradient(180deg, #fff, var(--claro-50)); }
+    .papeis-g > div > b { display: block; font-size: 11pt; }
+    .papeis-g small { color: var(--suave); font-size: 8.8pt; line-height: 1.45; display: block; }
+    .farol { display: inline-flex; align-items: center; gap: .35em; font-weight: 800; font-size: 8.5pt; padding: .1em .6em; border-radius: 99px; white-space: nowrap; }
+    .farol::before { content: ''; width: .55em; height: .55em; border-radius: 50%; background: currentColor; }
+    .farol.ok { background: var(--verde-100); color: var(--verde); }
+    .farol.at { background: var(--ambar-100); color: var(--ambar); }
+    .farol.es { background: var(--vermelho-100); color: var(--vermelho); }
+    .capa .selo { background: rgba(84, 88, 214, .35); }
+    .dois-cel { display: grid; grid-template-columns: 1fr 1fr; gap: 8mm; max-width: 120mm; margin: 0 auto; }
+  </style>
+</head>
+<body>
+
+<nav class="barra-web" aria-label="Guia">
+  <a href="/">← Abrir o Vértice</a>
+  <a class="baixar" href="guia/Guia-Vertice-Empresas.pdf" download>Baixar em PDF</a>
+</nav>
+
+<!-- ================= CAPA ================= -->
+<section class="pagina capa">
+  <div class="marca"><img src="img/icone.svg" alt=""><div><b>Vértice</b><small>Empresas</small></div></div>
+  <div class="titulo">
+    <span class="selo">Guia da empresa</span>
+    <h1>A gestão da sua empresa<br>no <em>ponto mais alto</em><br>de clareza.</h1>
+    <p>Do lançamento à DRE: contas a pagar e receber, orçamento, orçado × realizado, fluxo de caixa e a sua equipe, cada um com o seu papel.</p>
+  </div>
+  <div class="fim">
+    <span>Uma solução <b>AR Consultoria</b></span>
+    <span>Leitura de 15 minutos</span>
+  </div>
+</section>
+
+<!-- ================= BOAS-VINDAS ================= -->
+<section class="pagina">
+  <span class="cap"><span>👋</span> Boas-vindas</span>
+  <h2>Que bom ter a sua empresa aqui</h2>
+  <p class="intro">Contas, orçamento e relatórios da empresa num só lugar, no computador e no celular.</p>
+
+  <div class="duas">
+    <div>
+      <h3 style="margin-top:0">O que cada pessoa recebe</h3>
+      <ul>
+        <li>O <b>endereço</b> do Vértice</li>
+        <li>O seu <b>login</b> (usuário ou e-mail)</li>
+        <li>Uma <b>senha temporária</b>, trocada no primeiro acesso</li>
+      </ul>
+    </div>
+    <div class="dica" style="margin-top:0"><span class="rotulo-bloco">Segurança</span>
+      Usuários, papéis e acessos são definidos <b>só pela AR Consultoria</b>. Cada pessoa vê o que o seu papel permite.</div>
+  </div>
+
+  <h3 style="margin-top:.5em">Neste guia</h3>
+  <ol class="sumario">
+    <li><span>01</span><div><b>Primeiro acesso e papéis</b><small>Entrar, criar a senha e o que cada papel pode fazer</small></div></li>
+    <li><span>02</span><div><b>Painel</b><small>O mês da empresa em uma tela</small></div></li>
+    <li><span>03</span><div><b>Contas a pagar e receber</b><small>Lançar, repetir, parcelar e dar baixa</small></div></li>
+    <li><span>04</span><div><b>Orçamento</b><small>O plano do ano numa grade tipo planilha</small></div></li>
+    <li><span>05</span><div><b>Versões e aprovação</b><small>O Financeiro propõe, o Dono aprova</small></div></li>
+    <li><span>06</span><div><b>Orçado × realizado</b><small>O farol que mostra onde o resultado escapou</small></div></li>
+    <li><span>07</span><div><b>DRE gerencial</b><small>Da receita bruta ao resultado do período</small></div></li>
+    <li><span>08</span><div><b>Fluxo de caixa</b><small>Entradas, saídas e saldo mês a mês</small></div></li>
+    <li><span>09</span><div><b>Plano de contas e centros de custo</b><small>Os cadastros que organizam tudo</small></div></li>
+    <li><span>10</span><div><b>Equipe, plano e solicitações</b><small>Quem é quem e como pedir alterações à AR</small></div></li>
+    <li><span>11</span><div><b>Celular, exportação e dúvidas</b><small>Excel, PDF e perguntas frequentes</small></div></li>
+  </ol>
+  <div class="rodape"><span>Guia do <b>Vértice Empresas</b></span><span>2</span></div>
+</section>
+
+<!-- ================= 01 PRIMEIRO ACESSO E PAPÉIS ================= -->
+<section class="pagina">
+  <span class="cap"><span>01</span> Primeiro acesso e papéis</span>
+  <h2>Entre e conheça o seu papel</h2>
+  <div class="lado">
+    <ol class="passos">
+      <li>Abra o <b>endereço do Vértice</b> no navegador do computador ou do celular.</li>
+      <li>Digite o seu <b>login</b> e a <b>senha temporária</b> e toque em <b>Entrar</b>.</li>
+      <li>Crie uma <b>senha nova</b>, só sua, com pelo menos <b>8 caracteres</b>.</li>
+      <li>Pronto: o Vértice abre já na sua empresa, com o menu de acordo com o seu papel.</li>
+    </ol>
+    <figure style="margin-top:0"><img src="guia/img/02-criar-senha.jpg" alt="Janela Crie a sua senha"><figcaption>Criando a senha no 1º acesso</figcaption></figure>
+  </div>
+
+  <h3>Os 4 papéis</h3>
+  <div class="papeis-g">
+    <div><b>Dono</b><small>Faz tudo na empresa: lança, edita o orçamento e os cadastros, <b>aprova o orçamento</b> e envia solicitações à AR.</small></div>
+    <div><b>Financeiro</b><small>Lança contas, edita o orçamento (como <b>proposta</b>) e o plano de contas, e exporta os relatórios.</small></div>
+    <div><b>Gestor</b><small>Vê e lança <b>só nos centros de custo dele</b>, como Comercial ou Obras, e acompanha o orçado × realizado da área.</small></div>
+    <div><b>Leitura</b><small>Só consulta e exporta. Ideal para o contador ou um sócio. <b>Não conta</b> no limite de usuários do plano.</small></div>
+  </div>
+  <div class="dica"><span class="rotulo-bloco">Gestor</span>Quem é Gestor vê um aviso no topo das telas com os centros de custo que acompanha. Os números de outras áreas não aparecem para ele.</div>
+  <div class="atencao"><span class="rotulo-bloco">Esqueceu a senha?</span>Fale com a AR Consultoria. Uma nova senha temporária é gerada na hora, e os dados da empresa continuam lá.</div>
+  <div class="rodape"><span>Guia do <b>Vértice Empresas</b></span><span>3</span></div>
+</section>
+
+<!-- ================= 02 PAINEL ================= -->
+<section class="pagina">
+  <span class="cap"><span>02</span> Painel</span>
+  <h2>O mês da empresa em uma tela</h2>
+  <figure class="recorte"><img src="guia/img/empresas/e01-painel.jpg" alt="Painel do mês com saldo previsto, a receber, a pagar, atrasados, resultado contra o orçado e vencimentos" style="max-height:105mm"></figure>
+  <table class="tab">
+    <tr><th>Bloco</th><th>O que mostra</th></tr>
+    <tr><td>Saldo previsto do mês</td><td>Tudo o que a empresa tem a receber menos tudo o que tem a pagar no mês.</td></tr>
+    <tr><td>A receber e a pagar</td><td>Os totais do mês e quanto já foi recebido ou pago.</td></tr>
+    <tr><td>Atrasados</td><td>Contas vencidas e não baixadas, de qualquer mês.</td></tr>
+    <tr><td>Resultado × orçado</td><td>Receitas, custos e despesas do mês contra o orçamento aprovado, com o farol de cada um.</td></tr>
+    <tr><td>Vencimentos</td><td>O que está atrasado e o que vence nos próximos 7 dias. Toque em <b>Marcar pago</b> (ou <b>Marcar recebido</b>) para dar baixa ali mesmo.</td></tr>
+  </table>
+  <ul>
+    <li>Use <b>‹ ›</b> no topo para trocar o mês e <b>Hoje</b> para voltar ao mês atual.</li>
+    <li>O nome da empresa e o seu papel aparecem no topo e no menu.</li>
+  </ul>
+  <div class="rodape"><span>Guia do <b>Vértice Empresas</b></span><span>4</span></div>
+</section>
+
+<!-- ================= 03 CONTAS ================= -->
+<section class="pagina">
+  <span class="cap"><span>03</span> Contas a pagar e receber</span>
+  <h2>Lance uma conta em segundos</h2>
+  <div class="lado largo">
+    <div>
+      <ol class="passos">
+        <li>Toque em <b>Novo lançamento</b> (ou no <b>+</b> do celular, ou aperte <kbd>N</kbd>).</li>
+        <li>Escolha <b>A pagar</b> ou <b>A receber</b>.</li>
+        <li>Escreva a <b>descrição</b> e o <b>valor</b>, como <i>1.850,00</i>.</li>
+        <li>Escolha o <b>vencimento</b>, a <b>conta</b> do plano de contas e o <b>centro de custo</b>.</li>
+        <li>Se quiser, informe o <b>cliente ou fornecedor</b> e uma observação.</li>
+        <li>Em <b>Repetição</b>, escolha uma das opções da tabela abaixo.</li>
+        <li>Toque em <b>Salvar</b>.</li>
+      </ol>
+      <table class="tab">
+        <tr><th>Repetição</th><th>O que acontece</th></tr>
+        <tr><td>Só uma vez</td><td>Um lançamento no vencimento escolhido.</td></tr>
+        <tr><td>Todo mês</td><td>Repete o mesmo valor pelos meses que você indicar. Ex.: aluguel, folha, sistemas.</td></tr>
+        <tr><td>Parcelado</td><td><b>Divide o valor</b> pelas parcelas, uma por mês, com a numeração 1/3, 2/3…</td></tr>
+      </table>
+    </div>
+    <figure style="margin-top:0"><img src="guia/img/empresas/e03-form.jpg" alt="Formulário de novo lançamento a pagar, parcelado em 3 vezes"><figcaption>Uma locação parcelada em 3 vezes</figcaption></figure>
+  </div>
+  <div class="dica"><span class="rotulo-bloco">A conta define o tipo</span>As contas de <b>Receitas</b> aparecem quando você escolhe <b>A receber</b>; as de custos, despesas e impostos, quando escolhe <b>A pagar</b>. É assim que cada lançamento cai no lugar certo da DRE.</div>
+  <div class="rodape"><span>Guia do <b>Vértice Empresas</b></span><span>5</span></div>
+</section>
+
+<!-- ================= 03b LISTA ================= -->
+<section class="pagina">
+  <span class="cap"><span>03</span> Contas a pagar e receber</span>
+  <h2>Baixas, filtros e séries</h2>
+  <figure class="recorte"><img src="guia/img/empresas/e02-contas.jpg" alt="Lista de contas a pagar e receber do mês com filtros e situação" style="max-height:100mm"></figure>
+  <ul>
+    <li><b>Dar baixa:</b> toque na situação da conta (<i>Em aberto</i>, <i>Vence em breve</i>, <i>Atrasado</i>) para marcar como <b>Pago</b> ou <b>Recebido</b>. Tocou errado? Toque de novo ou use <b>Desfazer</b>.</li>
+    <li><b>Filtros:</b> Todos, A receber, A pagar, Em aberto e Atrasados. Também dá para filtrar por <b>centro de custo</b> e <b>buscar</b> por descrição, cliente, fornecedor ou conta.</li>
+    <li><b>Totais:</b> o topo mostra entradas, saídas e o saldo do que está na tela.</li>
+    <li><b>Editar:</b> o lápis abre o lançamento. Ali também dá para marcar <b>Já foi pago</b>.</li>
+    <li><b>Excluir uma série:</b> numa conta mensal ou parcelada, escolha <b>Só este</b>, <b>Este e os próximos</b> ou <b>Toda a série</b>.</li>
+  </ul>
+  <div class="atencao"><span class="rotulo-bloco">Gestor</span>O Gestor só lança, edita e dá baixa nos centros de custo dele. Quem é <b>Leitura</b> consulta e exporta, sem alterar.</div>
+  <div class="rodape"><span>Guia do <b>Vértice Empresas</b></span><span>6</span></div>
+</section>
+
+<!-- ================= 04 ORÇAMENTO ================= -->
+<section class="pagina">
+  <span class="cap"><span>04</span> Orçamento</span>
+  <h2>O plano do ano numa grade</h2>
+  <p class="intro">Cada linha é uma conta e cada coluna um mês. Os totais por grupo e o <b>resultado orçado</b> se recalculam enquanto você digita.</p>
+  <figure><img src="guia/img/empresas/e04-orcamento.jpg" alt="Cabeçalho do orçamento com botões e filtro de centro de custo"></figure>
+  <figure class="recorte"><img src="guia/img/empresas/e04b-grade.jpg" alt="Grade do orçamento com contas nas linhas e meses nas colunas" style="max-height:70mm"></figure>
+  <ul>
+    <li><b>Digitar:</b> como numa planilha. <kbd>Enter</kbd> desce, <kbd>Shift</kbd> + <kbd>Enter</kbd> sobe e <kbd>Tab</kbd> vai para o lado. Os valores são em reais inteiros.</li>
+    <li><b>Centro de custo:</b> escolha <b>Geral</b> (sem centro) ou um centro, como Obras ou Comercial, para digitar o orçamento dele. O <b>Consolidado</b> soma tudo e é só leitura.</li>
+    <li><b>Copiar do ano anterior + reajuste:</b> traz o orçamento do ano passado já corrigido pelo percentual que você informar.</li>
+    <li><b>Distribuir valor anual:</b> escolha a conta, informe o valor do ano e o Vértice divide em 12 meses iguais.</li>
+    <li><b>Excel:</b> baixa o orçamento em planilha, por conta e centro.</li>
+  </ul>
+  <div class="rodape"><span>Guia do <b>Vértice Empresas</b></span><span>7</span></div>
+</section>
+
+<!-- ================= 05 VERSÕES ================= -->
+<section class="pagina">
+  <span class="cap"><span>05</span> Versões e aprovação</span>
+  <h2>O Financeiro propõe, o Dono aprova</h2>
+  <p class="intro">Cada vez que alguém salva o orçamento, nasce uma <b>versão</b>. A versão <b>vigente</b> é a que vale no orçado × realizado, no painel e na DRE.</p>
+  <div class="lado largo">
+    <ol class="passos">
+      <li>O <b>Financeiro</b> monta ou revisa a grade e toca em <b>Salvar proposta</b>, dando um nome, como “Revisão de marketing”.</li>
+      <li>A versão aparece no <b>Histórico de versões</b> como <span class="tag aviso">proposta</span>.</li>
+      <li>O <b>Dono</b> abre a proposta, confere e toca em <b>Aprovar</b>. Ela vira <span class="tag ok">vigente</span>, e a anterior fica guardada.</li>
+      <li>Quando o próprio Dono edita, o botão é <b>Salvar e aprovar</b>: a versão já nasce vigente.</li>
+    </ol>
+    <figure style="margin-top:0"><img src="guia/img/empresas/e04c-versoes.jpg" alt="Histórico de versões do orçamento com vigente, anterior e proposta"><figcaption>Histórico de versões</figcaption></figure>
+  </div>
+  <h3>Comparar com versões anteriores</h3>
+  <p>Toque em <b>abrir</b> numa versão do histórico para ver a grade dela. Se gostar, salve como nova versão, e o histórico continua completo.</p>
+  <div class="dica"><span class="rotulo-bloco">Sem orçamento aprovado?</span>O orçado × realizado mostra um aviso até existir uma versão vigente para o ano. O realizado aparece normalmente; só falta a comparação.</div>
+  <div class="exemplo"><span class="rotulo-bloco">Alterações não salvas</span>Enquanto houver mudanças na grade, o topo avisa <b>alterações não salvas</b>. O Vértice também pergunta antes de trocar de ano ou de versão, para nada se perder.</div>
+  <div class="rodape"><span>Guia do <b>Vértice Empresas</b></span><span>8</span></div>
+</section>
+
+<!-- ================= 06 ORÇADO × REALIZADO ================= -->
+<section class="pagina">
+  <span class="cap"><span>06</span> Orçado × realizado</span>
+  <h2>Onde o resultado escapou</h2>
+  <figure><img src="guia/img/empresas/e05-ovr.jpg" alt="Orçado × realizado de outubro com resultado, receitas, custos e contas estouradas"></figure>
+  <ul>
+    <li>Escolha o período: <b>Mês</b>, <b>Trimestre</b> ou <b>Acumulado no ano</b>. Use <b>‹ ›</b> para trocar o mês.</li>
+    <li>Filtre por <b>centro de custo</b> para ver só uma área.</li>
+    <li>A tabela <b>Por conta</b> mostra orçado, realizado, diferença e % de cada conta. Toque num grupo para abrir ou fechar as contas dele.</li>
+  </ul>
+  <h3>O farol</h3>
+  <table class="tab">
+    <tr><th>Situação</th><th>Quando aparece</th></tr>
+    <tr><td><span class="farol ok">dentro</span></td><td>A diferença é de até 3%, ou é a favor da empresa (receita acima ou despesa abaixo do orçado).</td></tr>
+    <tr><td><span class="farol at">atenção</span></td><td>Entre 3% e 10% contra o orçado.</td></tr>
+    <tr><td><span class="farol es">estourado</span></td><td>Mais de 10% contra o orçado, ou um gasto numa conta sem orçamento.</td></tr>
+  </table>
+  <figure><img src="guia/img/empresas/e05c-ovr-grafico.jpg" alt="Gráfico de despesas orçadas e realizadas por mês e lista dos maiores desvios"><figcaption>Despesas mês a mês (em vermelho, acima do orçado) e os maiores desvios do período</figcaption></figure>
+  <div class="rodape"><span>Guia do <b>Vértice Empresas</b></span><span>9</span></div>
+</section>
+
+<!-- ================= 07 DRE ================= -->
+<section class="pagina">
+  <span class="cap"><span>07</span> DRE gerencial</span>
+  <h2>Da receita ao resultado</h2>
+  <p class="intro">A DRE é montada sozinha a partir dos lançamentos e do plano de contas. Não é preciso digitar nada além das contas do dia a dia.</p>
+  <figure><img src="guia/img/empresas/e06-dre.jpg" alt="DRE gerencial de outubro com linhas de receita, deduções, custos, despesas e resultado"></figure>
+  <table class="tab">
+    <tr><th>Coluna</th><th>O que mostra</th></tr>
+    <tr><td>Realizado</td><td>O que aconteceu no período escolhido (mês, trimestre ou ano até o mês).</td></tr>
+    <tr><td>Orçado</td><td>O que estava previsto na versão vigente do orçamento.</td></tr>
+    <tr><td>Acumulado</td><td>De janeiro até o mês escolhido.</td></tr>
+    <tr><td>% da receita</td><td>Quanto cada linha representa da receita bruta acumulada.</td></tr>
+  </table>
+  <ul>
+    <li>Toque numa linha com seta, como <b>(−) Despesas operacionais</b>, para ver as contas que formam o valor.</li>
+    <li>Os lançamentos entram pelo <b>mês de vencimento</b> (regime de competência gerencial).</li>
+    <li>Leve para a reunião de resultados com <b>Excel</b> ou <b>PDF</b>, no topo da tela.</li>
+  </ul>
+  <div class="rodape"><span>Guia do <b>Vértice Empresas</b></span><span>10</span></div>
+</section>
+
+<!-- ================= 08 FLUXO DE CAIXA ================= -->
+<section class="pagina">
+  <span class="cap"><span>08</span> Fluxo de caixa</span>
+  <h2>O caixa do ano, mês a mês</h2>
+  <figure><img src="guia/img/empresas/e07-caixa.jpg" alt="Fluxo de caixa com saldo final previsto, entradas, saídas, menor saldo e gráfico mensal"></figure>
+  <ul>
+    <li><b>Entradas e saídas</b> pela data de vencimento, com quanto já foi recebido e pago.</li>
+    <li><b>Saldo acumulado:</b> parte do <b>saldo inicial de caixa</b>, informado em Plano de contas e centros, e soma mês a mês.</li>
+    <li><b>Menor saldo do ano:</b> o mês mais apertado, para você se planejar com antecedência.</li>
+    <li>Se o caixa ficar <b>negativo</b> em algum mês, um aviso vermelho aparece no topo, com os meses.</li>
+    <li>A tabela no fim da tela mostra entradas, saídas, saldo do mês e saldo acumulado dos 12 meses.</li>
+  </ul>
+  <div class="dica"><span class="rotulo-bloco">Por centro de custo</span>Ao filtrar um centro, o fluxo mostra só as entradas e saídas dele, sem o saldo inicial da empresa. É o caso de quem é Gestor.</div>
+  <div class="rodape"><span>Guia do <b>Vértice Empresas</b></span><span>11</span></div>
+</section>
+
+<!-- ================= 09 CADASTROS ================= -->
+<section class="pagina">
+  <span class="cap"><span>09</span> Plano de contas e centros de custo</span>
+  <h2>Os cadastros que organizam tudo</h2>
+  <p class="intro">A empresa já começa com um plano de contas padrão e três centros de custo. O Dono e o Financeiro ajustam à realidade da empresa.</p>
+  <figure class="recorte"><img src="guia/img/empresas/e08-cadastros.jpg" alt="Tela de plano de contas e centros de custo" style="max-height:95mm"></figure>
+  <table class="tab">
+    <tr><th>Grupo</th><th>Na DRE</th><th>Exemplos</th></tr>
+    <tr><td>Receitas</td><td>Receita bruta</td><td>Vendas, prestação de serviços</td></tr>
+    <tr><td>Impostos e deduções</td><td>(−) Impostos e deduções</td><td>Simples Nacional, ISS</td></tr>
+    <tr><td>Custos</td><td>(−) Custos</td><td>Materiais, mão de obra direta</td></tr>
+    <tr><td>Despesas operacionais</td><td>(−) Despesas operacionais</td><td>Pessoal, aluguel, marketing, sistemas</td></tr>
+    <tr><td>Despesas financeiras</td><td>(−) Despesas financeiras</td><td>Tarifas bancárias, juros</td></tr>
+  </table>
+  <ul>
+    <li><b>Criar, renomear e desativar</b> contas e centros. Toque em <b>Salvar cadastros</b> ao terminar.</li>
+    <li>Contas e centros <b>já usados</b> não podem ser excluídos: <b>desative</b>. Eles somem das opções novas, e o histórico continua certo.</li>
+  </ul>
+  <div class="rodape"><span>Guia do <b>Vértice Empresas</b></span><span>12</span></div>
+</section>
+
+<!-- ================= 10 EQUIPE ================= -->
+<section class="pagina">
+  <span class="cap"><span>10</span> Equipe, plano e solicitações</span>
+  <h2>Quem é quem na empresa</h2>
+  <p class="intro">Em <b>Equipe e plano</b> todos veem a equipe, os papéis e o plano da empresa. As alterações são feitas pela AR Consultoria, por segurança.</p>
+  <div class="lado largo">
+    <div>
+      <h3 style="margin-top:0">Para pedir uma alteração (Dono)</h3>
+      <ol class="passos">
+        <li>Toque em <b>Solicitar alteração à AR</b>.</li>
+        <li>Escolha o pedido: <b>novo usuário</b>, <b>mudar papel</b>, <b>bloquear usuário</b>, <b>mudar de plano</b> ou outro.</li>
+        <li>Preencha o nome, o e-mail, o papel e o centro de custo.</li>
+        <li>Envie <b>pelo WhatsApp</b> ou direto para o <b>painel da AR</b>.</li>
+      </ol>
+    </div>
+    <figure style="margin-top:0"><img src="guia/img/empresas/e09b-solicitar.jpg" alt="Janela Solicitar alteração à AR Consultoria"></figure>
+  </div>
+  <h3>Planos</h3>
+  <table class="tab">
+    <tr><th>Plano</th><th>Usuários</th><th>Mensal</th></tr>
+    <tr><td>Essencial</td><td>Até 3</td><td>R$ 149,00</td></tr>
+    <tr><td>Gestão</td><td>Até 8</td><td>R$ 299,00</td></tr>
+    <tr><td>Grupo</td><td>Até 20</td><td>R$ 590,00</td></tr>
+  </table>
+  <ul>
+    <li>Usuários de <b>Leitura</b> não contam no limite. Há também planos <b>trimestral</b>, <b>semestral</b> e <b>anual</b>, mais baratos por mês.</li>
+    <li>A assinatura é da empresa e começa no <b>primeiro acesso</b> de qualquer usuário dela. Perto do vencimento, a AR envia um aviso.</li>
+  </ul>
+  <div class="rodape"><span>Guia do <b>Vértice Empresas</b></span><span>13</span></div>
+</section>
+
+<!-- ================= 11 CELULAR E DÚVIDAS ================= -->
+<section class="pagina">
+  <span class="cap"><span>11</span> Celular, exportação e dúvidas</span>
+  <h2>No celular e na reunião</h2>
+  <div class="lado largo">
+    <div>
+      <h3 style="margin-top:0">No celular</h3>
+      <ul>
+        <li>O <b>menu</b> fica embaixo. Deslize para o lado para ver todas as telas.</li>
+        <li>O botão redondo <b>+</b> cria um lançamento de qualquer tela.</li>
+        <li>Instale como app: Chrome <b>⋮ → Instalar app</b>; iPhone <b>Compartilhar → Tela de Início</b>.</li>
+        <li>Em <b>Minha conta</b>: mudar o nome, trocar a senha e sair.</li>
+      </ul>
+      <h3>Exportar</h3>
+      <ul>
+        <li><b>Excel:</b> contas do mês, orçamento, orçado × realizado, DRE e fluxo de caixa.</li>
+        <li><b>PDF:</b> o botão <b>PDF</b> abre a impressão já sem menus. Escolha <b>Salvar como PDF</b>.</li>
+      </ul>
+    </div>
+    <figure class="celular" style="margin-top:0;max-width:56mm;justify-self:center"><img src="guia/img/empresas/e11-celular-painel.jpg" alt="Painel do Vértice Empresas no celular"><figcaption>O painel no celular</figcaption></figure>
+  </div>
+  <h3>Perguntas frequentes</h3>
+  <dl class="faq">
+    <dt>Outra empresa ou a AR veem os nossos lançamentos?</dt>
+    <dd>Outra empresa, nunca. A AR cuida dos acessos e do plano, sem precisar abrir os números da empresa.</dd>
+    <dt>Duas pessoas podem lançar ao mesmo tempo?</dt>
+    <dd>Sim. Cada lançamento é salvo na hora. Ao voltar para a aba do Vértice, a tela se atualiza com o que os outros lançaram.</dd>
+  </dl>
+  <div class="contato">
+    <h3>Precisa de ajuda?</h3>
+    <p style="margin:0">Fale com a <b>AR Consultoria</b> pelo WhatsApp em que a empresa recebeu os acessos, ou use <b>Solicitar alteração à AR</b>.</p>
+  </div>
+  <div class="rodape"><span>Guia do <b>Vértice Empresas</b> · Uma solução <b>AR Consultoria</b></span><span>14</span></div>
+</section>
+
+</body>
+</html>

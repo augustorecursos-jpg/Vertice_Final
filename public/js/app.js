@@ -2472,7 +2472,7 @@
       </div>
       <div class="cartao">
         <div class="cartao-cab"><div><h2><span class="bolha"><i data-ic="maleta"></i></span> Empresas</h2><p>Cada empresa tem plano, assinatura e usuários. Só a AR cria e altera.</p></div>
-          <button type="button" class="btn" data-emp-nova>${ic('mais')} Nova empresa</button></div>
+          <div class="linha"><a class="btn sec" href="/guia-empresas" target="_blank" rel="noopener">${ic('livro')} Guia das empresas</a><button type="button" class="btn" data-emp-nova>${ic('mais')} Nova empresa</button></div></div>
         ${empresas.length ? `<div class="tabela-wrap"><table class="t simples tab-empresas"><thead><tr><th>Empresa</th><th>Plano</th><th>Usuários</th><th>Assinatura</th><th>Situação</th><th></th></tr></thead><tbody>${linhas}</tbody></table></div>`
           : '<p class="suave">Nenhuma empresa ainda. Crie a primeira em “Nova empresa”.</p>'}
       </div>

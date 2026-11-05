@@ -630,7 +630,9 @@
       return `<div class="cartao"><div class="cartao-cab"><div><h2><span class="bolha"><i data-ic="ajustes"></i></span> Minha conta</h2><p>${esc(eu.login)} · ${esc(E.PAPEL[papel()].nome)} em ${esc(D.empresa.nome)}</p></div></div>
         <form id="pj-perfil" class="grade-form" autocomplete="off"><div><label class="rotulo" for="pj-nome">Seu nome</label><input type="text" id="pj-nome" maxlength="120" value="${esc(eu.nome)}"></div>
           <div class="linha fim" style="align-self:end"><button class="btn">Salvar nome</button></div></form>
-        <div class="linha" style="margin-top:1em"><button type="button" class="btn sec" data-trocar-senha>${ic('chave')} Trocar senha</button><button type="button" class="btn sec" data-sair>${ic('sair')} Sair</button></div></div>`;
+        <div class="linha" style="margin-top:1em"><button type="button" class="btn sec" data-trocar-senha>${ic('chave')} Trocar senha</button><button type="button" class="btn sec" data-sair>${ic('sair')} Sair</button></div></div>
+        <div class="cartao"><div class="cartao-cab"><div><h2><span class="bolha"><i data-ic="livro"></i></span> Guia do Vértice Empresas</h2><p>Passo a passo de todas as telas, com os papéis de cada pessoa.</p></div></div>
+          <div class="linha"><a class="btn sec" href="/guia-empresas" target="_blank" rel="noopener">${ic('livro')} Abrir o guia</a><a class="btn fantasma" href="/guia/Guia-Vertice-Empresas.pdf" download>${ic('baixar')} PDF</a></div></div>`;
     }
 
     // ---------- exportação ----------

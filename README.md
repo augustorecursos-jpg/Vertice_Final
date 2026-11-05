@@ -72,7 +72,8 @@ Conta de empresa com gestão financeira gerencial. **Quem cria e controla empres
 
 - **Web:** `/guia` (público, sem login), com link na tela de entrada e em Minha conta. É o link para enviar a um cliente novo junto com o acesso.
 - **PDF:** `public/guia/Guia-Vertice.pdf` (12 páginas A4), também em `/guia/Guia-Vertice.pdf`.
-- **Atualizar:** edite `public/guia.html` e gere o PDF de novo com `LANG=pt_BR.UTF-8 node scripts/gerar-guia-pdf.js`. O script precisa do Playwright e avisa se alguma página passar do tamanho da folha.
+- **Vértice Empresas:** `/guia-empresas` (público) e `public/guia/Guia-Vertice-Empresas.pdf` (14 páginas A4), com papéis, contas, orçamento e versões, orçado × realizado, DRE, fluxo de caixa, cadastros e equipe. Link em Minha conta da empresa e no painel Empresas da AR.
+- **Atualizar:** edite `public/guia.html` (ou `public/guia-empresas.html`) e gere os PDFs de novo com `LANG=pt_BR.UTF-8 node scripts/gerar-guia-pdf.js` (ou passe só um dos HTML). O script precisa do Playwright e avisa se alguma página passar do tamanho da folha.
 
 ## Rodar localmente
 
