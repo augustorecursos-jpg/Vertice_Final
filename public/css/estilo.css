@@ -839,6 +839,10 @@ button.tag-compras svg.ic { width: .9em; height: .9em; }
   .itens-fat .n { grid-row: 1 / span 2; grid-column: 2; }
 }
 
+/* ---------- demonstração ---------- */
+.demo-acessos { display: flex; flex-wrap: wrap; gap: .6em 1.6em; }
+.demo-acessos div { display: flex; align-items: center; gap: .5em; }
+
 /* ---------- simulador ---------- */
 .sim-cab .sim-acoes { gap: .5em; }
 .sim-cab .sim-cenarios { order: 4; }

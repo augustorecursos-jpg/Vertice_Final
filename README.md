@@ -37,6 +37,10 @@ Regras de proteção:
 - Escritas na API só aceitam JSON (proteção contra CSRF).
 - Cabeçalhos de segurança, com CSP restritiva.
 
+## Demonstração para clientes
+
+Em **Clientes pessoa física → Demonstração para clientes**, o administrador cria (ou restaura) com um clique contas de exemplo cheias de dados: `demo.pf` (pessoa física, com fatura detalhada, parcelas, provisões, planejamentos e um cenário do simulador) e a empresa **Construtora Horizonte (demonstração)**, com `demo.empresa` (Dono) e `demo.gestor` (Gestor do centro Comercial), um ano de lançamentos e orçamento aprovado. As três contas usam a mesma senha, mostrada só na hora, e entram sem trocar a senha. **Restaurar** refaz todos os dados para o mês atual e gera uma senha nova. As contas de demonstração ficam marcadas no painel e não entram na receita nem nos avisos de vencimento; um login que já pertença a um cliente real nunca é sobrescrito.
+
 ## Vértice Empresas
 
 Conta de empresa com gestão financeira gerencial. **Quem cria e controla empresas, usuários, papéis e acessos é só a AR Consultoria**, no menu **Empresas e usuários**.

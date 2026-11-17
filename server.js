@@ -131,7 +131,7 @@ const telefoneValido = (v) => { const d = String(v || '').replace(/\D/g, ''); re
 const paraAdmin = (u, diasAviso) => ({
   ...publico(u), telefone: u.telefone || '', assinaturaInicio: u.assinatura_inicio, assinaturaVence: u.assinatura_vence,
   assinatura: situacaoAssinatura(u, diasAviso), plano: N.PLANO_ASSINATURA[u.plano] ? u.plano : 'pf',
-  periodo: N.PERIODO[u.periodo] ? u.periodo : 'mensal', ultimoValor: u.ultimo_valor ?? null, ultimaRenovacao: u.ultima_renovacao || null,
+  periodo: N.PERIODO[u.periodo] ? u.periodo : 'mensal', ultimoValor: u.ultimo_valor ?? null, ultimaRenovacao: u.ultima_renovacao || null, demo: !!u.demo,
 });
 
 function transacao(fn) {
@@ -478,6 +478,9 @@ app.get('/api/admin/auditoria', exigirAdmin, (req, res) => {
 const empresas = require('./empresas')(app, {
   db, exigirLogin, exigirAdmin, auditar, lerConfig, transacao, hojeISO, somarDias, diasAte, dataValida, texto, telefoneValido,
 });
+
+// ---------- demonstração para clientes ----------
+require('./demo')(app, { db, exigirAdmin, auditar, transacao, hojeISO, somarDias, hashSenha, senhaTemporaria });
 
 app.use('/api', (req, res) => res.status(404).json({ erro: 'Rota não encontrada.' }));
 app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars

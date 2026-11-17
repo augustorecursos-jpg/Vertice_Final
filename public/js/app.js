@@ -2061,7 +2061,7 @@
   let configAssin = { mensalidade: 1199, precos: N.PRECOS_PADRAO, diasAviso: 5, mensagem: '', mensagemPadrao: '' };
   const planoDe = (u) => (N.PLANO_ASSINATURA[u.plano] ? u.plano : 'pf');
   const dataBR = (iso) => (iso ? iso.split('-').reverse().join('/') : '');
-  const precisaAtencao = (u) => u.ativo && ['aviso', 'hoje', 'vencida'].includes(u.assinatura?.cod);
+  const precisaAtencao = (u) => u.ativo && !u.demo && ['aviso', 'hoje', 'vencida'].includes(u.assinatura?.cod);
 
   function tagAssinatura(u) {
     const a = u.assinatura || {};
@@ -2080,12 +2080,57 @@
     c.hidden = !n; c.textContent = n; c.title = `${n} assinatura(s) vencendo ou vencida(s)`;
   }
 
+  // ---------- demonstração para clientes ----------
+  // Contas de exemplo (pessoa física e empresa) com um ano de dados; restaurar refaz tudo e gera uma senha nova.
+  let demoInfo = null;
+  async function renderDemo() {
+    const c = $('#cartao-demo');
+    try { demoInfo = await api('GET', '/api/admin/demo'); } catch (e) { c.innerHTML = `<p class="txt-erro">${esc(e.message)}</p>`; return; }
+    const d = demoInfo;
+    c.innerHTML = `<div class="cartao-cab"><div><h2><span class="bolha ciano"><i data-ic="brilho"></i></span> Demonstração para clientes</h2>
+        <p>Contas de exemplo, já cheias de dados, para apresentar o Vértice: uma pessoa física e uma empresa com os papéis Dono e Gestor. Os dados reais dos clientes não são tocados.</p></div>
+        <button type="button" class="btn" data-demo>${ic(d.existe ? 'repetir' : 'mais')} ${d.existe ? 'Restaurar demonstração' : 'Criar demonstração'}</button></div>
+      ${d.existe ? `<div class="demo-acessos">
+          <div><span class="tag info">Pessoa física</span><b>${esc(d.loginPf)}</b></div>
+          ${d.loginsEmpresa.map((u) => `<div><span class="tag indigo">Empresa · ${esc(u.papel === 'dono' ? 'Dono' : 'Gestor')}</span><b>${esc(u.login)}</b></div>`).join('')}
+        </div>
+        <p class="dica">Dados atualizados em ${esc(dataBR(d.restauradaEm))}. Restaure antes de cada apresentação: os dados voltam ao exemplo do mês atual e uma senha nova é gerada (a mesma para as três contas).</p>`
+      : '<p class="dica">Ao criar, você recebe os logins e a senha para entrar. Não é preciso trocar a senha no primeiro acesso.</p>'}`;
+    hidratar(c);
+  }
+  async function criarDemo() {
+    const d = demoInfo;
+    if (d?.existe && !(await confirmar({ titulo: 'Restaurar a demonstração?', botao: 'Restaurar',
+      texto: 'Tudo o que foi alterado nas contas de demonstração volta ao exemplo do mês atual, e uma <b>senha nova</b> é gerada. A senha anterior deixa de funcionar.' }))) return;
+    try {
+      const r = await api('POST', '/api/admin/demo', {});
+      renderDemo(); renderUsuarios();
+      const linhas = [['Pessoa física', r.loginPf], ...r.loginsEmpresa.map((u) => [`Empresa · ${u.papel === 'dono' ? 'Dono' : 'Gestor'}`, u.login])];
+      const { modal } = abrirModal(`
+        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="t-demo">
+          <div class="cab-modal"><h2 id="t-demo">${d?.existe ? 'Demonstração restaurada' : 'Demonstração criada'}</h2>
+            <button type="button" class="btn fantasma icone" data-fechar aria-label="Fechar"><i data-ic="x"></i></button></div>
+          <p style="margin-top:0">Endereço: <b>${esc(location.origin)}</b></p>
+          <table class="t simples"><thead><tr><th>Conta</th><th>Login</th></tr></thead><tbody>
+            ${linhas.map(([n, l]) => `<tr><td>${esc(n)}</td><td><b>${esc(l)}</b></td></tr>`).join('')}</tbody></table>
+          <div class="senha-gerada"><code>${esc(r.senha)}</code><button type="button" class="btn sec peq" data-copiar>${ic('copiar')} Copiar acessos</button></div>
+          <p class="dica">A senha é a mesma para as três contas e não aparece de novo. Se perder, é só restaurar a demonstração.</p>
+          <div class="rodape-modal"><button type="button" class="btn" data-fechar>Pronto</button></div>
+        </div>`, { estreito: true });
+      $('[data-copiar]', modal).addEventListener('click', async () => {
+        const txt = `Vértice · demonstração\nEndereço: ${location.origin}\n${linhas.map(([n, l]) => `${n}: ${l}`).join('\n')}\nSenha: ${r.senha}`;
+        try { await navigator.clipboard.writeText(txt); toast('Acessos copiados.'); } catch { toast('Não foi possível copiar. Selecione e copie a senha.', { erro: true }); }
+      });
+    } catch (e) { toast(e.message, { erro: true, tempo: 9000 }); }
+  }
+
   async function renderUsuarios() {
     const corpo = $('#tabela-usuarios');
     if (!usuarios.length) corpo.innerHTML = '<tbody><tr><td>Carregando…</td></tr></tbody>';
     try {
       const [lista, aud, cfg] = await Promise.all([api('GET', '/api/admin/usuarios'), api('GET', '/api/admin/auditoria?limite=100'), api('GET', '/api/admin/config')]);
       usuarios = lista; configAssin = cfg;
+      if (!demoInfo) renderDemo();
       seloAssinaturas(lista);
       const ativos = lista.filter((u) => u.ativo).length;
       $('#resumo-usuarios').textContent = `${lista.length} ${lista.length === 1 ? 'conta' : 'contas'} · ${ativos} ${ativos === 1 ? 'ativa' : 'ativas'}${lista.length - ativos ? ` · ${lista.length - ativos} bloqueada(s)` : ''}`;
@@ -2102,7 +2147,7 @@
         const souEu = u.id === eu.id;
         const assinante = u.perfil !== 'admin';
         return `<tr class="${u.ativo ? '' : 'inativo'} ${precisaAtencao(u) ? 'atencao' : ''}">
-          <td><div class="pessoa"><span class="av">${esc(iniciais(u.nome))}</span><div><b>${esc(u.nome)}${souEu ? ' <span class="tag info">você</span>' : ''}</b><small>${esc(u.login)}${u.perfil === 'admin' ? ' · <span class="txt-admin">administrador</span>' : ''}</small></div></div></td>
+          <td><div class="pessoa"><span class="av">${esc(iniciais(u.nome))}</span><div><b>${esc(u.nome)}${souEu ? ' <span class="tag info">você</span>' : ''}${u.demo ? ' <span class="tag neutra">demonstração</span>' : ''}</b><small>${esc(u.login)}${u.perfil === 'admin' ? ' · <span class="txt-admin">administrador</span>' : ''}</small></div></div></td>
           <td>${!u.ativo ? `<span class="tag erro">${ic('cadeado')} Bloqueado</span>`
             : u.trocarSenha ? `<span class="tag aviso">${ic('relogio')} ${u.ultimoAcesso ? 'Senha temporária' : 'Aguardando 1º acesso'}</span>`
             : `<span class="tag ok">${ic('check')} Ativo</span>`}</td>
@@ -2425,9 +2470,10 @@
       usuariosEmpresa = est.empresaSel ? await api('GET', `/api/admin/empresas/${est.empresaSel}/usuarios`) : [];
     } catch (e) { raiz.innerHTML = `<div class="cartao"><p class="txt-erro">${esc(e.message)}</p></div>`; return; }
     seloEmpresas();
-    const ativas = empresas.filter((e) => e.ativo);
+    const clientes = empresas.filter((e) => !e.demo); // a empresa de demonstração não é cliente
+    const ativas = clientes.filter((e) => e.ativo);
     const atencao = ativas.filter((e) => ['aviso', 'hoje', 'vencida'].includes(e.assinatura?.cod));
-    const totUsuarios = empresas.reduce((a, e) => a + e.usuarios, 0);
+    const totUsuarios = clientes.reduce((a, e) => a + e.usuarios, 0);
     const receita = ativas.reduce((a, e) => a + mensalEquivalente(e), 0);
     const e = empSel();
 
@@ -2435,7 +2481,7 @@
       const pl = N.PLANO_ASSINATURA[x.plano], pe = N.PERIODO[x.periodo];
       const valor = x.ultimoValor != null ? x.ultimoValor : N.precoPeriodo(configAssin.precos, x.plano, x.periodo).total;
       return `<tr class="${x.id === est.empresaSel ? 'sel-linha' : ''} ${x.ativo ? '' : 'inativo'}" data-emp="${x.id}">
-        <td><div class="pessoa"><span class="av">${esc(iniciais(x.nome))}</span><div><b>${esc(x.nome)}</b><small>${x.cnpj ? `CNPJ ${esc(cnpjBR(x.cnpj))}` : 'sem CNPJ'}</small></div></div></td>
+        <td><div class="pessoa"><span class="av">${esc(iniciais(x.nome))}</span><div><b>${esc(x.nome)}${x.demo ? ' <span class="tag neutra">demonstração</span>' : ''}</b><small>${x.cnpj ? `CNPJ ${esc(cnpjBR(x.cnpj))}` : (x.demo ? 'conta de exemplo' : 'sem CNPJ')}</small></div></div></td>
         <td><span class="tag indigo">${esc(pl.nome)} · ${esc(pe.nome)} · ${moeda(valor)}</span></td>
         <td>${x.usuariosPagos} de ${x.limiteUsuarios}${x.usuarios - x.usuariosPagos ? ` <small class="suave">+ ${x.usuarios - x.usuariosPagos} leitura/bloq.</small>` : ''}</td>
         <td class="cel-assin">${tagAssinatura(x)}</td>
@@ -2465,8 +2511,8 @@
           <span class="acoes-atencao"><button type="button" class="btn sec peq" data-emp-abrir="${s.empresaId}">Abrir empresa</button>
           <button type="button" class="btn sec peq" data-sol-resolver="${s.id}">${ic('check')} Resolvida</button></span></li>`).join('')}</ul></div></div>` : ''}
       <div class="cards dash-cards" style="--n:4">
-        <div class="kpi destaque dash-kpi"><span class="rot">Empresas clientes</span><div class="val">${empresas.length}</div><div class="det">${ativas.length} ${ativas.length === 1 ? 'ativa' : 'ativas'}${empresas.length - ativas.length ? ` · ${empresas.length - ativas.length} bloqueada(s)` : ''}</div></div>
-        <div class="kpi dash-kpi"><span class="rot">Usuários de empresas</span><div class="val">${totUsuarios}</div><div class="det">em ${empresas.length} ${empresas.length === 1 ? 'empresa' : 'empresas'}</div></div>
+        <div class="kpi destaque dash-kpi"><span class="rot">Empresas clientes</span><div class="val">${clientes.length}</div><div class="det">${ativas.length} ${ativas.length === 1 ? 'ativa' : 'ativas'}${clientes.length - ativas.length ? ` · ${clientes.length - ativas.length} bloqueada(s)` : ''}</div></div>
+        <div class="kpi dash-kpi"><span class="rot">Usuários de empresas</span><div class="val">${totUsuarios}</div><div class="det">em ${clientes.length} ${clientes.length === 1 ? 'empresa' : 'empresas'}</div></div>
         <div class="kpi verde dash-kpi"><span class="rot">Receita mensal Empresas</span><div class="val">${moeda(receita)}</div><div class="det">equivalente mensal das ativas</div></div>
         <div class="kpi ${atencao.length + solicitacoes.length ? 'vermelho' : ''} dash-kpi"><span class="rot">Atenção</span><div class="val">${atencao.length + solicitacoes.length}</div><div class="det">${atencao.length} vencendo ou vencida(s) · ${solicitacoes.length} pedido(s)</div></div>
       </div>
@@ -2627,6 +2673,7 @@
     if (alvo.matches('[data-sair]')) return sair();
     if (alvo.matches('[data-trocar-senha]')) return trocarSenha();
     if (alvo.matches('[data-novo-usuario]')) return formUsuario();
+    if (alvo.matches('[data-demo]')) return criarDemo();
     if (alvo.dataset.usr) return acaoUsuario(alvo.dataset.usr, Number(alvo.dataset.uid));
     if (alvo.matches('[data-limpar-filtro]')) { est.filtro = 'todos'; est.filtroProvisao = null; est.filtroCartao = null; est.busca = ''; $('#busca').value = ''; return render(); }
     if (alvo.matches('[data-prov-limpar]')) { est.filtroProvisao = null; return render(); }

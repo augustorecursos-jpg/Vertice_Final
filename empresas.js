@@ -31,7 +31,7 @@ module.exports = function montarEmpresas(app, ctx) {
     id: emp.id, nome: emp.nome, cnpj: emp.cnpj || '', telefone: emp.telefone || '', plano: planoDe(emp).id,
     periodo: N.PERIODO[emp.periodo] ? emp.periodo : 'mensal', ativo: !!emp.ativo, assinaturaInicio: emp.assinatura_inicio,
     assinaturaVence: emp.assinatura_vence, assinatura: situacao(emp, diasAviso), ultimoValor: emp.ultimo_valor ?? null,
-    ultimaRenovacao: emp.ultima_renovacao || null, limiteUsuarios: planoDe(emp).usuarios, criadoEm: emp.criado_em,
+    ultimaRenovacao: emp.ultima_renovacao || null, limiteUsuarios: planoDe(emp).usuarios, criadoEm: emp.criado_em, demo: !!emp.demo,
   });
   const membro = (u) => ({
     id: u.id, nome: u.nome, login: u.login, papel: E.PAPEL[u.papel] ? u.papel : 'leitura', centros: centrosDe(u),

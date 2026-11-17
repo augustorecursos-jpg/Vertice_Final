@@ -130,6 +130,8 @@ CREATE TABLE IF NOT EXISTS renovacoes_empresas (
 `);
 
 // Migrações: colunas novas em bancos já existentes.
+const colunasEmpresas = new Set(db.prepare('PRAGMA table_info(empresas)').all().map((c) => c.name));
+if (!colunasEmpresas.has('demo')) db.exec('ALTER TABLE empresas ADD COLUMN demo INTEGER NOT NULL DEFAULT 0'); // empresa de demonstração
 const colunas = new Set(db.prepare('PRAGMA table_info(usuarios)').all().map((c) => c.name));
 for (const [nome, def] of [
   ['telefone', 'TEXT'],              // para o aviso por WhatsApp
@@ -141,7 +143,8 @@ for (const [nome, def] of [
   ['ultima_renovacao', 'TEXT'],      // AAAA-MM-DD
   ['empresa_id', 'INTEGER'],         // usuário de uma empresa (Vértice Empresas); null = pessoa física ou admin
   ['papel', 'TEXT'],                 // dono | financeiro | gestor | leitura
-  ['centros', "TEXT NOT NULL DEFAULT '[]'"], // centros de custo do gestor (JSON); vazio = todos
+  ['centros', "TEXT NOT NULL DEFAULT '[]'"],
+  ['demo', 'INTEGER NOT NULL DEFAULT 0'], // conta de demonstração (criada pelo botão do administrador) // centros de custo do gestor (JSON); vazio = todos
 ]) {
   if (!colunas.has(nome)) db.exec(`ALTER TABLE usuarios ADD COLUMN ${nome} ${def}`);
 }
