@@ -11,6 +11,7 @@
       secao: 'painel', ano: hojeD.getFullYear(), mes: hojeD.getMonth(),
       modo: 'mes', centro: '', filtro: 'todos', busca: '', abertos: new Set(['receita', 'deducao', 'custo', 'despesa', 'financeiro']),
       orc: null, bucket: '_', estrutura: null,
+      cal: { vista: (() => { try { return ['mes', 'semana', 'lista'].find((v) => v === localStorage.getItem('vertice:pj-cal-vista')) || 'mes'; } catch { return 'mes'; } })(), filtro: 'todos', dia: null },
     };
     let D = null; // resposta de /api/empresa
     const papel = () => D.eu.papel;
@@ -28,7 +29,7 @@
 
     // ---------- moldura: menu, topo e seções ----------
     const SECOES = [
-      ['grupo', 'Gestão'], ['painel', 'painel', 'Painel', 'Painel'], ['contas', 'lista', 'Contas a pagar e receber', 'Contas'],
+      ['grupo', 'Gestão'], ['painel', 'painel', 'Painel', 'Painel'], ['contas', 'lista', 'Contas a pagar e receber', 'Contas'], ['calendario', 'calendario', 'Calendário', 'Agenda'],
       ['orcamento', 'tabela', 'Orçamento', 'Orçamento'], ['ovr', 'alvo', 'Orçado × realizado', 'Orç. × real'], ['dre', 'grafico', 'DRE gerencial', 'DRE'],
       ['caixa', 'dinheiro', 'Fluxo de caixa', 'Caixa'], ['grupo', 'Cadastros'], ['cadastros', 'pasta', 'Plano de contas e centros', 'Cadastros'],
       ['equipe', 'usuarios', 'Equipe e plano', 'Equipe'], ['conta', 'ajustes', 'Minha conta', 'Conta'],
@@ -69,13 +70,13 @@
       $('#sinc').textContent = `${E.PAPEL[papel()].nome} · ${D.empresa.nome}`;
       $('#sinc').className = 'sinc ok';
       const anual = ['orcamento', 'caixa'].includes(est.secao);
-      const comPeriodo = ['painel', 'contas', 'ovr', 'dre', 'orcamento', 'caixa'].includes(est.secao);
+      const comPeriodo = ['painel', 'contas', 'calendario', 'ovr', 'dre', 'orcamento', 'caixa'].includes(est.secao);
       $('#pj-periodo').hidden = !comPeriodo; $('[data-pj-hoje]').hidden = !comPeriodo;
       $('#pj-rot-periodo').textContent = anual ? 'Ano' : 'Mês de referência';
       $('#pj-nome-periodo').textContent = anual ? est.ano : `${MESES[est.mes]} ${est.ano}`;
       $$('[data-pj-novo]').forEach((b) => { b.hidden = !pode('lancar'); });
       $('.topo').classList.toggle('sem-periodo', !comPeriodo && !pode('lancar'));
-      const f = { painel: rPainel, contas: rContas, orcamento: rOrcamento, ovr: rOvr, dre: rDre, caixa: rCaixa, cadastros: rCadastros, equipe: rEquipe, conta: rConta }[est.secao];
+      const f = { painel: rPainel, contas: rContas, calendario: rCalendario, orcamento: rOrcamento, ovr: rOvr, dre: rDre, caixa: rCaixa, cadastros: rCadastros, equipe: rEquipe, conta: rConta }[est.secao];
       raiz.innerHTML = f();
       hidratar(raiz);
     }
@@ -179,12 +180,69 @@
           : `<p class="suave">Nenhum lançamento ${est.filtro !== 'todos' || est.busca || est.centro ? 'com esses filtros' : 'neste mês'}.</p>${pode('lancar') ? `<button type="button" class="btn" data-pj-novo>${ic('mais')} Novo lançamento</button>` : ''}`}</div>`;
     }
 
-    function formLancamento(l = null) {
+    // ---------- calendário de vencimentos ----------
+    const CAL_FILTROS = [
+      ['todos', 'Todos', () => true],
+      ['pagar', 'A pagar', (l) => tipoDe(l) === 'pagar'],
+      ['receber', 'A receber', (l) => tipoDe(l) === 'receber'],
+      ['atrasados', 'Atrasados', (l, s) => s.cod === 'atrasado'],
+    ];
+    function itemCal(l, hoje) {
+      const rec = tipoDe(l) === 'receber';
+      const meu = pode('lancar') && (!meusCentros() || meusCentros().includes(l.centro));
+      return {
+        id: l.id, iso: N.isoDe(l), desc: l.desc, centavos: l.centavos, pago: !!l.pago, sit: N.situacao(l, hoje), entrada: rec, tipo: rec ? 'receber' : 'pagar',
+        podeMarcar: meu, podeEditar: meu, rotPago: rec ? 'Recebido' : 'Pago',
+        sub: esc([contaNome(l.conta), l.centro ? centroNome(l.centro) : '', l.parte, l.parcela ? `${l.parcela.n}/${l.parcela.de}` : ''].filter(Boolean).join(' · ')),
+      };
+    }
+    function rCalendario() {
+      const hoje = new Date();
+      const filtro = CAL_FILTROS.find((f) => f[0] === est.cal.filtro) || CAL_FILTROS[0];
+      const todos = D.lancamentos.filter((l) => !est.centro || l.centro === est.centro).map((l) => ({ l, s: N.situacao(l, hoje) }));
+      const prefixo = `${est.ano}-${String(est.mes + 1).padStart(2, '0')}-`;
+      const doMes = todos.filter(({ l }) => N.isoDe(l).startsWith(prefixo));
+      const C = window.VerticeCalendario;
+      const r = C.resumo(todos.map(({ l }) => itemCal(l, hoje)), est.ano, est.mes, hoje);
+      return avisoGestor() + C.montar({
+        ano: est.ano, mes: est.mes, hoje, vista: est.cal.vista, filtro: filtro[0], dia: est.cal.dia, modo: 'pj', podeLancar: pode('lancar'), ic,
+        itens: todos.filter(({ l, s }) => filtro[2](l, s)).map(({ l }) => itemCal(l, hoje)),
+        titulo: `Calendário de vencimentos · ${MESES[est.mes].toLowerCase()} de ${est.ano}`,
+        sub: `${doMes.length} ${doMes.length === 1 ? 'conta' : 'contas'} no mês · verde a receber, laranja a pagar`,
+        filtros: CAL_FILTROS.map(([id, nome, fn]) => [id, nome, id === 'atrasados' ? todos.filter(({ l, s }) => fn(l, s)).length : doMes.filter(({ l, s }) => fn(l, s)).length]),
+        filtrosExtra: filtroCentroHtml(),
+        resumo: [
+          { icone: 'calendario', classe: 'ciano', rot: 'Vence hoje', val: String(r.hojeTodos.n), det: moeda(r.hojeTodos.v) },
+          { icone: 'sobe', classe: 'verde', rot: 'A receber no mês', val: moeda(r.receberMes.v), det: `${r.receberMes.n} em aberto` },
+          { icone: 'desce', classe: 'laranja', rot: 'A pagar no mês', val: moeda(r.pagarMes.v), det: `${r.pagarMes.n} em aberto` },
+          { icone: 'alerta', classe: 'vermelho', rot: 'Atrasadas', val: String(r.atrasadas.n), det: r.atrasadas.n ? `${moeda(r.atrasadas.v)} · todos os meses` : 'Nada atrasado' },
+        ],
+        legenda: `<span data-tipo-cal="receber"><i></i>A receber</span><span data-tipo-cal="pagar"><i></i>A pagar</span><span class="st">↑ entra · ↓ sai no dia</span>
+          <span class="st">${ic('check')} pago (apagado)</span><span class="st erro">${ic('alerta')} atrasado</span><span class="st hoje">contorno azul = hoje</span>`,
+      });
+    }
+    window.VerticeCalendario.ligar(raiz, {
+      dia: (d) => {
+        const x = window.VerticeCalendario.deIso(d);
+        est.cal.dia = d;
+        if (x.getFullYear() !== est.ano || x.getMonth() !== est.mes) { est.ano = x.getFullYear(); est.mes = x.getMonth(); }
+        render();
+        $(`#pj button.n[data-cal-dia="${d}"]`)?.focus();
+        if (matchMedia('(max-width: 1100px)').matches) $('#pj .cal-painel')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      },
+      vista: (v) => { est.cal.vista = v; try { localStorage.setItem('vertice:pj-cal-vista', v); } catch { /* sem armazenamento */ } render(); },
+      filtro: (f) => { est.cal.filtro = est.cal.filtro === f && f !== 'todos' ? 'todos' : f; render(); },
+      marcar: (id) => alternarPago(id),
+      editar: (id) => { const l = D.lancamentos.find((x) => x.id === id); if (l) formLancamento(l); },
+      novo: (d) => formLancamento(null, d),
+    });
+
+    function formLancamento(l = null, dataNova = null) {
       if (!pode('lancar')) return;
       const contasAtivas = D.estrutura.contas.filter((c) => c.ativa || c.id === l?.conta);
       const centros = D.estrutura.centros.filter((c) => (c.ativo || c.id === l?.centro) && (!meusCentros() || meusCentros().includes(c.id)));
       const tipo0 = l ? tipoDe(l) : 'pagar';
-      const data0 = l ? N.isoDe(l) : `${est.ano}-${String(est.mes + 1).padStart(2, '0')}-${String(est.ano === hojeD.getFullYear() && est.mes === hojeD.getMonth() ? hojeD.getDate() : 10).padStart(2, '0')}`;
+      const data0 = l ? N.isoDe(l) : dataNova || `${est.ano}-${String(est.mes + 1).padStart(2, '0')}-${String(est.ano === hojeD.getFullYear() && est.mes === hojeD.getMonth() ? hojeD.getDate() : 10).padStart(2, '0')}`;
       const opcoes = (tipo) => E.GRUPOS.filter((g) => g.tipo === tipo).map((g) => {
         const cs = contasAtivas.filter((c) => c.grupo === g.id);
         return cs.length ? `<optgroup label="${esc(g.nome)}">${cs.map((c) => `<option value="${esc(c.id)}" ${c.id === l?.conta ? 'selected' : ''}>${esc(c.nome)}</option>`).join('')}</optgroup>` : '';
@@ -755,7 +813,7 @@
       const b = e.target.closest('[data-pj-mover], [data-pj-hoje], [data-pj-novo]');
       if (!b) return;
       if (b.matches('[data-pj-novo]')) return formLancamento();
-      if (b.matches('[data-pj-hoje]')) { est.ano = hojeD.getFullYear(); est.mes = hojeD.getMonth(); return render(); }
+      if (b.matches('[data-pj-hoje]')) { est.ano = hojeD.getFullYear(); est.mes = hojeD.getMonth(); est.cal.dia = null; return render(); }
       const d = +b.dataset.pjMover;
       if (['orcamento', 'caixa'].includes(est.secao)) {
         if (est.secao === 'orcamento' && est.orc?.alterado) {
@@ -768,6 +826,7 @@
     document.addEventListener('keydown', (e) => {
       if (e.ctrlKey || e.metaKey || e.altKey || $('.fundo-modal') || e.target.closest('input, select, textarea')) return;
       if ((e.key === 'n' || e.key === 'N') && pode('lancar')) { e.preventDefault(); formLancamento(); }
+      else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && est.secao === 'calendario') { const r = N.somarMeses(est.ano, est.mes, e.key === 'ArrowLeft' ? -1 : 1); est.ano = r.ano; est.mes = r.mes; render(); }
     });
     window.addEventListener('hashchange', () => {
       if (est.secao === 'orcamento' && est.orc?.alterado && location.hash !== '#orcamento') toast('O orçamento tem alterações não salvas: volte em Orçamento para salvar.', { erro: true, tempo: 7000 });

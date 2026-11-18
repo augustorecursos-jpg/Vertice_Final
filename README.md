@@ -49,7 +49,7 @@ Conta de empresa com gestão financeira gerencial. **Quem cria e controla empres
 - **Usuários da empresa:** criados pela AR com papel e centros de custo. Usuários de **Leitura** não contam no limite do plano. Troca de papel, redefinição de senha, bloqueio e exclusão ficam na atividade recente.
 - **Papéis:** **Dono** (tudo, inclusive aprovar o orçamento), **Financeiro** (lança, edita orçamento e plano de contas, exporta), **Gestor** (vê e lança só nos centros de custo dele) e **Leitura** (consulta e exporta). As permissões são verificadas no servidor.
 - **Solicitações:** o Dono vê a equipe em modo consulta e usa **Solicitar alteração à AR**, pelo WhatsApp da AR (configurado em Planos, preços e avisos) ou direto no painel da AR.
-- **Telas da empresa:** Painel do mês; Contas a pagar e receber (única, mensal ou parcelada, com cliente/fornecedor, conta e centro de custo); Orçamento anual em grade tipo planilha, por centro de custo, com cópia do ano anterior + reajuste, distribuição do valor anual e **versões** (Financeiro propõe, Dono aprova); Orçado × realizado por mês, trimestre ou acumulado, com farol (dentro, atenção, estourado) e maiores desvios; DRE gerencial; Fluxo de caixa com saldo acumulado; Plano de contas e centros de custo; Equipe e plano.
+- **Telas da empresa:** Painel do mês; Contas a pagar e receber (única, mensal ou parcelada, com cliente/fornecedor, conta e centro de custo); **Calendário** de vencimentos (verde a receber, laranja a pagar, entradas e saídas de cada dia, filtro por centro de custo, baixa e lançamento direto no dia); Orçamento anual em grade tipo planilha, por centro de custo, com cópia do ano anterior + reajuste, distribuição do valor anual e **versões** (Financeiro propõe, Dono aprova); Orçado × realizado por mês, trimestre ou acumulado, com farol (dentro, atenção, estourado) e maiores desvios; DRE gerencial; Fluxo de caixa com saldo acumulado; Plano de contas e centros de custo; Equipe e plano.
 - **Exportação:** Excel (CSV) e PDF (impressão) em contas, orçamento, orçado × realizado, DRE e fluxo de caixa.
 - A assinatura é da empresa: começa no primeiro acesso de qualquer usuário dela.
 
@@ -57,6 +57,7 @@ Conta de empresa com gestão financeira gerencial. **Quem cria e controla empres
 
 - **Lançamentos:** cada lançamento tem vencimento, e os atrasados e próximos de vencer ficam destacados. Tem recorrência mensal e parcelamento (o valor é guardado em centavos, então as parcelas fecham o total exato). Séries são editadas ou excluídas só no mês, dali em diante ou inteiras.
 - **Mês:** saldo previsto e realizado, falta pagar, receitas e investimentos. Há filtros, busca e "Desfazer".
+- **Calendário:** os vencimentos do mês numa grade colorida (cada cor é uma categoria), com o total do dia, pagos apagados e atrasados em vermelho. Mostra quanto vence hoje, nos próximos 7 dias, o que está atrasado e o que falta pagar no mês. Tocar num dia abre as contas dele, com **Marcar pago** e **Lançar neste dia**. Tem as visões Mês, Semana e Lista e os filtros A pagar, A receber, Atrasados e Cartões. No celular, cada dia mostra bolinhas coloridas.
 - **Visão anual:** gráfico de entradas × saídas, tabela por categoria com detalhe e saldo acumulado.
 - **Sincronização:** os dados ficam no servidor e o mesmo login funciona no celular e no computador. Se duas telas alterarem ao mesmo tempo, a segunda recebe a versão mais recente em vez de sobrescrever.
 - **Seus dados:** cópia em JSON, CSV do ano e importação, que também aceita arquivos do Vértice antigo.
@@ -122,6 +123,7 @@ public/
   css/estilo.css     Identidade visual AR Consultoria (variáveis em :root)
   js/nucleo.js       Regras de negócio, usadas no navegador e no servidor
   js/nucleo-empresa.js  Regras do Vértice Empresas (DRE, orçado × realizado, fluxo de caixa)
+  js/calendario.js      Calendário de vencimentos (pessoa física e empresa)
   js/app.js          Interface (pessoa física e administração)
   js/empresa.js      Interface da empresa
   js/entrar.js       Login

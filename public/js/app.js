@@ -150,6 +150,7 @@
   const est = {
     secao: 'mes', ano: agora.getFullYear(), mes: agora.getMonth(),
     filtro: 'todos', filtroProvisao: null, filtroCartao: null, painelAno: false, painelCats: new Set(), painelAbertas: new Set(), painelAba: 'resumo', gastosAbertos: new Set(), comprasAbertas: new Set(), sim: { base: 'mes', ativo: null, cen: { valores: {}, tipos: {} } }, simTiposAberto: false, empresaSel: null, busca: '', ordem: prefs.ordem, abertas: new Set(),
+    cal: { vista: ['mes', 'semana', 'lista'].includes(prefs.calVista) ? prefs.calVista : 'mes', filtro: 'todos', dia: null },
   };
 
   // ---------- toast ----------
@@ -276,7 +277,7 @@
   }
 
   // ---------- formulário de lançamento ----------
-  function abrirFormulario(existente = null) {
+  function abrirFormulario(existente = null, { data = null } = {}) {
     const tpl = $('#tpl-lancamento').content.firstElementChild.cloneNode(true);
     const { fundo, modal, fechar } = abrirModal(tpl.innerHTML);
     const f = (id) => $('#' + id, modal);
@@ -288,7 +289,8 @@
 
     const hoje = new Date();
     const diaPadrao = est.ano === hoje.getFullYear() && est.mes === hoje.getMonth() ? hoje.getDate() : Math.min(10, N.diasNoMes(est.ano, est.mes));
-    const l = existente || { desc: '', centavos: null, categoria: prefs.categoria, ano: est.ano, mes: est.mes, dia: diaPadrao };
+    const d0 = data ? N.lerIso(data) : null;
+    const l = existente || { desc: '', centavos: null, categoria: prefs.categoria, ano: d0?.ano ?? est.ano, mes: d0?.mes ?? est.mes, dia: d0?.dia ?? diaPadrao };
     $(`input[name=cat][value="${CAT[l.categoria] ? l.categoria : 'fixa'}"]`, modal).checked = true;
     f('f-desc').value = l.desc;
     f('f-valor').value = l.centavos != null ? N.valorParaCampo(l.centavos) : '';
@@ -639,10 +641,75 @@
   function lerHash() {
     if (modoEmpresa) return;
     const [s, sub] = location.hash.replace('#', '').split('/');
-    est.secao = ['mes', 'dashboard', 'ano', 'planos', 'sim', 'ajustes'].includes(s) || (['usuarios', 'empresas'].includes(s) && eu?.perfil === 'admin') ? s : 'mes';
+    est.secao = ['mes', 'calendario', 'dashboard', 'ano', 'planos', 'sim', 'ajustes'].includes(s) || (['usuarios', 'empresas'].includes(s) && eu?.perfil === 'admin') ? s : 'mes';
     est.plano = s === 'planos' && sub ? decodeURIComponent(sub) : null;
     render();
     window.scrollTo({ top: 0 });
+  }
+
+  // ---------- calendário de vencimentos ----------
+  const CAL_FILTROS = [
+    ['todos', 'Todos', () => true],
+    ['pagar', 'A pagar', (l) => CAT[l.categoria].tipo !== 'entrada'],
+    ['receber', 'A receber', (l) => CAT[l.categoria].tipo === 'entrada'],
+    ['atrasados', 'Atrasados', (l, s) => s.cod === 'atrasado'],
+    ['cartoes', 'Cartões', (l) => l.categoria === 'cartao'],
+  ];
+  function itemCalendario(l, hoje) {
+    const c = CAT[l.categoria];
+    const compras = l.compras?.length ? ` · ${l.compras.length} ${l.compras.length === 1 ? 'compra' : 'compras'}` : '';
+    return {
+      id: l.id, iso: N.isoDe(l), desc: l.desc, centavos: l.centavos, pago: !!l.pago, sit: N.situacao(l, hoje),
+      entrada: c.tipo === 'entrada', cat: l.categoria, podeMarcar: true, podeEditar: true, rotPago: c.feito,
+      sub: esc(`${c.nome}${l.cartao ? ' · ' + l.cartao : ''}${l.parcela ? ` · ${l.parcela.n}/${l.parcela.total}` : ''}${compras}`),
+    };
+  }
+  function renderCalendario() {
+    const hoje = new Date();
+    const cal = est.cal;
+    const filtro = CAL_FILTROS.find((f) => f[0] === cal.filtro) || CAL_FILTROS[0];
+    const todos = dados.lancamentos.map((l) => ({ l, s: N.situacao(l, hoje) }));
+    const prefixo = `${est.ano}-${String(est.mes + 1).padStart(2, '0')}-`;
+    const doMes = todos.filter(({ l }) => N.isoDe(l).startsWith(prefixo));
+    const itens = todos.filter(({ l, s }) => filtro[2](l, s)).map(({ l }) => itemCalendario(l, hoje));
+    const r = window.VerticeCalendario.resumo(todos.map(({ l }) => itemCalendario(l, hoje)), est.ano, est.mes, hoje);
+    const nMes = doMes.length;
+    $('#calendario').innerHTML = window.VerticeCalendario.montar({
+      ano: est.ano, mes: est.mes, hoje, itens, vista: cal.vista, filtro: filtro[0], dia: cal.dia, modo: 'pf', podeLancar: true, ic,
+      titulo: `Calendário de ${MESES[est.mes].toLowerCase()} de ${est.ano}`,
+      sub: `${nMes} ${nMes === 1 ? 'lançamento' : 'lançamentos'} no mês · cada cor é uma categoria`,
+      filtros: CAL_FILTROS.map(([id, nome, fn]) => [id, nome, id === 'atrasados' ? todos.filter(({ l, s }) => fn(l, s)).length : doMes.filter(({ l, s }) => fn(l, s)).length]),
+      resumo: [
+        { icone: 'calendario', classe: 'ciano', rot: 'Vence hoje', val: String(r.hoje.n), det: moeda(r.hoje.v) },
+        { icone: 'relogio', classe: 'azul', rot: 'Próximos 7 dias', val: `${r.prox7.n} ${r.prox7.n === 1 ? 'conta' : 'contas'}`, det: moeda(r.prox7.v) },
+        { icone: 'alerta', classe: 'vermelho', rot: 'Atrasadas', val: String(r.atrasadas.n), det: r.atrasadas.n ? `${moeda(r.atrasadas.v)} · todos os meses` : 'Nada atrasado' },
+        { icone: 'dinheiro', classe: 'ambar', rot: 'Falta pagar no mês', val: moeda(r.pagarMes.v), det: `${r.pagarMes.n} ${r.pagarMes.n === 1 ? 'conta em aberto' : 'contas em aberto'}` },
+      ],
+      legenda: CATEGORIAS.map((c) => `<span data-cat="${c.id}"><i></i>${esc(c.nome)}</span>`).join('')
+        + `<span class="st">${ic('check')} pago (apagado)</span><span class="st erro">${ic('alerta')} atrasado</span><span class="st hoje">contorno azul = hoje</span>`,
+    });
+  }
+  function ligarCalendario() {
+    window.VerticeCalendario.ligar($('#calendario'), {
+      dia: (d) => {
+        const x = window.VerticeCalendario.deIso(d);
+        est.cal.dia = d;
+        if (x.getFullYear() !== est.ano || x.getMonth() !== est.mes) { est.ano = x.getFullYear(); est.mes = x.getMonth(); return render(); }
+        renderCalendario();
+        $(`#calendario button.n[data-cal-dia="${d}"]`)?.focus();
+        if (matchMedia('(max-width: 1100px)').matches) $('#calendario .cal-painel')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      },
+      vista: (v) => { est.cal.vista = prefs.calVista = v; salvarPrefs(); renderCalendario(); },
+      filtro: (f) => { est.cal.filtro = est.cal.filtro === f && f !== 'todos' ? 'todos' : f; renderCalendario(); },
+      marcar: (id) => {
+        const l = dados.lancamentos.find((x) => x.id === id);
+        if (!l) return;
+        alternarPago(id);
+        toast(l.pago ? `${l.desc}: ${CAT[l.categoria].feito.toLowerCase()}.` : `${l.desc} voltou para em aberto.`, { acao: () => alternarPago(id) });
+      },
+      editar: (id) => { const l = dados.lancamentos.find((x) => x.id === id); if (l) abrirFormulario(l); },
+      novo: (d) => abrirFormulario(null, { data: d }),
+    });
   }
 
   // ---------- render ----------
@@ -653,6 +720,7 @@
     $$('#menu a').forEach((a) => { if (a.dataset.secao === est.secao) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
     renderTopo();
     if (est.secao === 'mes') renderMes();
+    if (est.secao === 'calendario') renderCalendario();
     if (est.secao === 'ano') renderAno();
     if (est.secao === 'dashboard') renderDashboard();
     if (est.secao === 'ajustes') renderAjustes();
@@ -675,7 +743,7 @@
     $('#nome-usuario').textContent = nome || 'Você';
     $('#av-usuario').textContent = (nome || 'V').split(/\s+/).map((p) => p[0]).slice(0, 2).join('').toUpperCase();
     const ano = anual();
-    const comPeriodo = ['mes', 'dashboard', 'ano', 'sim'].includes(est.secao);
+    const comPeriodo = ['mes', 'calendario', 'dashboard', 'ano', 'sim'].includes(est.secao);
     $('.topo .mes').hidden = !comPeriodo;
     $('#btn-hoje').hidden = !comPeriodo;
     $('.topo').classList.toggle('sem-periodo', !comPeriodo);
@@ -2697,7 +2765,7 @@
 
   $('#mes-ant').addEventListener('click', () => mover(-1));
   $('#mes-prox').addEventListener('click', () => mover(1));
-  $('#btn-hoje').addEventListener('click', () => { const h = new Date(); est.ano = h.getFullYear(); est.mes = h.getMonth(); render(); });
+  $('#btn-hoje').addEventListener('click', () => { const h = new Date(); est.ano = h.getFullYear(); est.mes = h.getMonth(); est.cal.dia = null; render(); });
   $('#competencia').addEventListener('change', (e) => {
     const [a, m] = e.target.value.split('-').map(Number);
     if (a && m) { est.ano = a; est.mes = m - 1; render(); }
@@ -2733,8 +2801,8 @@
     if (!eu || modoEmpresa || e.ctrlKey || e.metaKey || e.altKey || $('.fundo-modal')) return;
     if (e.target.closest('input, select, textarea, [contenteditable]')) return;
     if (e.key === 'n' || e.key === 'N') { e.preventDefault(); abrirFormulario(); }
-    else if (e.key === 'ArrowLeft' && ['mes', 'dashboard', 'ano'].includes(est.secao)) mover(-1);
-    else if (e.key === 'ArrowRight' && ['mes', 'dashboard', 'ano'].includes(est.secao)) mover(1);
+    else if (e.key === 'ArrowLeft' && ['mes', 'calendario', 'dashboard', 'ano'].includes(est.secao)) mover(-1);
+    else if (e.key === 'ArrowRight' && ['mes', 'calendario', 'dashboard', 'ano'].includes(est.secao)) mover(1);
     else if (e.key === '/' && est.secao === 'mes') { e.preventDefault(); $('#busca').focus(); }
   });
 
@@ -2767,6 +2835,7 @@
     ligarPlanos();
     ligarSimulador();
     ligarTiposProprios();
+    ligarCalendario();
     if (eu.perfil === 'admin') {
       ligarConfigAssinaturas();
       ligarAdminEmpresas();
