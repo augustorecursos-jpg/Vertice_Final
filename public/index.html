@@ -226,10 +226,24 @@
               <input type="text" id="cfg-whats" inputmode="tel" maxlength="20" placeholder="(11) 98765-4321"></div>
             <div><label class="rotulo" for="cfg-dias">Avisar quando faltarem <small>(dias)</small></label>
               <input type="number" id="cfg-dias" min="1" max="30" inputmode="numeric"></div>
+            <div class="inteiro pix-cfg">
+              <div>
+                <h3><i data-ic="pix"></i> Pix para receber as renovações</h3>
+                <p class="dica" style="margin:.1em 0 .8em">O QR Code e o “Pix copia e cola” saem com o valor do plano de cada cliente. O dinheiro cai direto na sua conta; depois, é só registrar em “Renovou”.</p>
+                <div class="campos">
+                  <div class="inteiro"><label class="rotulo" for="cfg-pix-chave">Chave Pix <small>(CPF, CNPJ, e-mail, celular ou chave aleatória)</small></label>
+                    <input type="text" id="cfg-pix-chave" maxlength="80" autocomplete="off" spellcheck="false"></div>
+                  <div><label class="rotulo" for="cfg-pix-nome">Nome do recebedor <small>(como no banco)</small></label><input type="text" id="cfg-pix-nome" maxlength="25"></div>
+                  <div><label class="rotulo" for="cfg-pix-cidade">Cidade</label><input type="text" id="cfg-pix-cidade" maxlength="15"></div>
+                </div>
+                <p class="dica" id="cfg-pix-info" aria-live="polite"></p>
+              </div>
+              <div class="qr-box" id="cfg-pix-qr"></div>
+            </div>
             <div class="inteiro">
               <label class="rotulo" for="cfg-msg">Mensagem padrão de aviso</label>
               <textarea id="cfg-msg" rows="8" maxlength="2000"></textarea>
-              <p class="dica">Campos automáticos: <code>{nome}</code> primeiro nome · <code>{vencimento}</code> data · <code>{prazo}</code> “daqui a 3 dias”, “hoje”… · <code>{opcoes}</code> lista dos períodos com preço e valor por mês · <code>{valor}</code> preço mensal · <code>{periodo}</code> período atual da pessoa.</p>
+              <p class="dica">Campos automáticos: <code>{nome}</code> primeiro nome · <code>{vencimento}</code> data · <code>{prazo}</code> “daqui a 3 dias”, “hoje”… · <code>{opcoes}</code> lista dos períodos com preço e valor por mês · <code>{valor}</code> preço mensal · <code>{periodo}</code> período atual da pessoa · <code>{pix}</code> Pix copia e cola com o valor do plano (se não estiver na mensagem, entra no final).</p>
             </div>
             <div class="inteiro linha fim">
               <button type="button" class="btn fantasma" id="cfg-padrao">Restaurar texto padrão</button>

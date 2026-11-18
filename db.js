@@ -153,9 +153,10 @@ for (const [nome, def] of [
 const CONFIG_PADRAO = {
   mensalidade_centavos: '1199',
   dias_aviso: '5',
-  mensagem_aviso: 'Olá, {nome}! Tudo bem?\n\nSua assinatura do Vértice vence em {vencimento} ({prazo}). Deseja renovar?\n\nEscolha o plano que preferir:\n{opcoes}\n\nÉ só responder com o plano escolhido que eu envio os dados para pagamento.\n\nAR Consultoria',
+  mensagem_aviso: 'Olá, {nome}! Tudo bem?\n\nSua assinatura do Vértice vence em {vencimento} ({prazo}). Deseja renovar?\n\nEscolha o plano que preferir:\n{opcoes}\n\n{pix}\n\nSe preferir outro período, é só responder que eu envio o Pix do plano escolhido.\n\nAR Consultoria',
   precos_planos: JSON.stringify(N.PRECOS_PADRAO),
   whatsapp_ar: '', // WhatsApp da AR para as solicitações das empresas
+  pix: '', // chave Pix da AR para as renovações (JSON)
 };
 function lerConfig() {
   const cfg = { ...CONFIG_PADRAO };
@@ -166,7 +167,10 @@ function lerConfig() {
   precos ||= structuredClone(N.PRECOS_PADRAO);
   // Bancos antigos só tinham a mensalidade: ela vira o preço mensal de pessoa física.
   if (!gravadas.has('precos_planos') && gravadas.has('mensalidade_centavos')) precos.pf.mensal = Number(cfg.mensalidade_centavos);
-  return { mensalidade: precos.pf.mensal, precos, diasAviso: Number(cfg.dias_aviso), mensagem: cfg.mensagem_aviso, whatsappAR: cfg.whatsapp_ar || '' };
+  let pix = null;
+  try { pix = cfg.pix ? N.limparPix(JSON.parse(cfg.pix)) : null; } catch { /* sem Pix */ }
+  pix ||= N.limparPix(null);
+  return { mensalidade: precos.pf.mensal, precos, diasAviso: Number(cfg.dias_aviso), mensagem: cfg.mensagem_aviso, whatsappAR: cfg.whatsapp_ar || '', pix };
 }
 function gravarConfig(chave, valor) {
   db.prepare('INSERT INTO config (chave, valor) VALUES (?, ?) ON CONFLICT (chave) DO UPDATE SET valor = excluded.valor').run(chave, String(valor));

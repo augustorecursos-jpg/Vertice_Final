@@ -105,6 +105,17 @@ test('tabela de preços por plano e período', async () => {
   assert.equal((await admin('PUT', '/api/admin/config', { precos: structuredClone(require('../public/js/nucleo.js').PRECOS_PADRAO) })).status, 200);
 });
 
+test('chave Pix das renovações', async () => {
+  assert.equal((await admin('GET', '/api/admin/config')).dados.pix.chave, '');
+  assert.equal((await admin('PUT', '/api/admin/config', { pix: { chave: '123', nome: 'AR', cidade: 'SP' } })).status, 400);
+  assert.equal((await admin('PUT', '/api/admin/config', { pix: { chave: '(11) 98634-5441', nome: 'AR Consultoria', cidade: 'São Paulo' } })).status, 200);
+  const c = (await admin('GET', '/api/admin/config')).dados;
+  assert.deepEqual(c.pix, { chave: '+5511986345441', tipo: 'celular', nome: 'AR Consultoria', cidade: 'Sao Paulo' });
+  assert.match(c.mensagem, /\{pix\}/);
+  assert.equal((await admin('PUT', '/api/admin/config', { pix: { chave: '' } })).status, 200);
+  assert.equal((await admin('GET', '/api/admin/config')).dados.pix.chave, '');
+});
+
 test('admin ajusta vencimento e telefone; valida os dados', async () => {
   assert.equal((await admin('PUT', `/api/admin/usuarios/${id}`, { assinaturaVence: '2027-02-30' })).status, 400);
   assert.equal((await admin('PUT', `/api/admin/usuarios/${id}`, { telefone: '123' })).status, 400);

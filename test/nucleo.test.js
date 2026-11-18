@@ -557,3 +557,23 @@ test('tipos de gasto próprios: criar, validar, usar na análise e no simulador'
   assert.equal(N.todosTipos().length, 12);
   assert.equal(N.TIPO['u:viagem-de-trabalho'], undefined);
 });
+
+test('Pix: chave, CRC e copia e cola', () => {
+  // exemplo do manual do BR Code (Banco Central)
+  assert.equal(N.crc16('00020126580014br.gov.bcb.pix0136123e4567-e12b-12d1-a456-4266554400005204000053039865802BR5913Fulano de Tal6008BRASILIA62070503***6304'), '1D3D');
+  assert.deepEqual(N.chavePix('123.456.789-09'), { chave: '12345678909', tipo: 'cpf' });
+  assert.deepEqual(N.chavePix('12.345.678/0001-95'), { chave: '12345678000195', tipo: 'cnpj' });
+  assert.deepEqual(N.chavePix('(11) 98634-5441'), { chave: '+5511986345441', tipo: 'celular' });
+  assert.deepEqual(N.chavePix('+55 11 98634-5441'), { chave: '+5511986345441', tipo: 'celular' });
+  assert.deepEqual(N.chavePix('Contato@Empresa.com.br'), { chave: 'contato@empresa.com.br', tipo: 'email' });
+  assert.equal(N.chavePix('123'), null);
+  assert.equal(N.limparPix({ chave: 'x@y.com', nome: '', cidade: 'SP' }), null);
+  assert.deepEqual(N.limparPix({ chave: '' }), { chave: '', tipo: '', nome: '', cidade: '' });
+  const p = N.limparPix({ chave: 'x@y.com', nome: 'João da Consultoria Financeira Ltda', cidade: 'São José dos Campos' });
+  assert.equal(p.nome, 'Joao da Consultoria Finan');
+  assert.equal(p.cidade, 'Sao Jose dos Ca');
+  const c = N.pixCopiaECola({ chave: 'x@y.com', nome: 'AR Consultoria', cidade: 'São Paulo' }, 10788, 'PF-12');
+  assert.match(c, /^000201.+br\.gov\.bcb\.pix0107x@y\.com.+5406107\.88.+5914AR Consultoria6009Sao Paulo.+0504PF126304[0-9A-F]{4}$/);
+  assert.equal(c.slice(-4), N.crc16(c.slice(0, -4)));
+  assert.equal(N.pixCopiaECola({ chave: '' }, 100), '');
+});

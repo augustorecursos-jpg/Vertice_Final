@@ -1263,3 +1263,31 @@ button.nome:hover { color: var(--primaria); text-decoration: underline; }
   .zona-arq .ico, .zona-arq .arrastar { display: none; }
   .zona-arq .bts { grid-column: 1; }
 }
+
+/* ---------- Pix das renovações ---------- */
+.pix-cfg { display: grid; grid-template-columns: minmax(0, 1fr) 190px; gap: 1em 1.4em; align-items: start; border: 1px solid var(--borda); border-radius: 16px; padding: 1em 1.1em; background: #f7fbfd; }
+.pix-cfg h3 { margin: 0 0 .2em; font-size: 1rem; display: flex; align-items: center; gap: .5em; }
+.pix-cfg h3 svg.ic, .pix-tit svg.ic { width: 1.3em; height: 1.3em; color: #32bcad; flex: none; }
+.pix-cfg .campos { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .8em; }
+.pix-cfg .campos .inteiro { grid-column: 1 / -1; }
+.pix-cfg .dica { margin: .6em 0 0; }
+.qr-box { background: #fff; border: 1px solid var(--borda); border-radius: 14px; padding: .7em; text-align: center; }
+.qr-box canvas { width: 100%; height: auto; display: block; }
+.qr-box small { display: block; color: var(--suave); font-size: .74rem; margin-top: .3em; }
+.qr-box b { display: block; color: var(--marinho-900); font-size: 1.05rem; }
+.qr-vazio { display: grid; place-items: center; gap: .4em; padding: 1.6em .4em; color: var(--suave); }
+.qr-vazio svg.ic { width: 2.4em; height: 2.4em; color: #b8c6d6; }
+.modal.aviso-largo { width: min(900px, 100%); }
+.aviso-largo .aviso-corpo { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 1.2em; align-items: start; }
+.aviso-corpo textarea { width: 100%; }
+.pix-lado { background: #f2f8fc; border-radius: 16px; padding: .9em; display: grid; gap: .55em; }
+.pix-lado .btn { width: 100%; justify-content: center; }
+.pix-lado .qr-box canvas { max-width: 210px; margin: 0 auto; }
+.pix-tit { display: flex; align-items: center; gap: .45em; font-weight: 800; color: var(--marinho-900); }
+.pilulas.mini span { padding: .25em .6em; font-size: .74rem; }
+@media (max-width: 760px) {
+  .pix-cfg { grid-template-columns: minmax(0, 1fr); }
+  .pix-cfg .campos { grid-template-columns: minmax(0, 1fr); }
+  .pix-cfg .qr-box { max-width: 220px; }
+  .aviso-largo .aviso-corpo { grid-template-columns: minmax(0, 1fr); }
+}

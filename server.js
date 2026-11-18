@@ -418,7 +418,9 @@ app.post('/api/admin/usuarios/:id/renovar', exigirAdmin, (req, res) => {
 app.get('/api/admin/config', exigirAdmin, (req, res) => res.json({ ...lerConfig(), mensagemPadrao: CONFIG_PADRAO.mensagem_aviso }));
 
 app.put('/api/admin/config', exigirAdmin, (req, res) => {
-  const { mensalidade, diasAviso, mensagem, precos, whatsappAR } = req.body || {};
+  const { mensalidade, diasAviso, mensagem, precos, whatsappAR, pix } = req.body || {};
+  const novoPix = pix === undefined ? undefined : N.limparPix(pix);
+  if (novoPix === null) return res.status(400).json({ erro: 'Confira o Pix: chave válida (CPF, CNPJ, e-mail, celular ou chave aleatória), nome do recebedor e cidade.' });
   const whats = whatsappAR === undefined ? undefined : (whatsappAR ? telefoneValido(whatsappAR) : '');
   if (whats === null) return res.status(400).json({ erro: 'WhatsApp da AR inválido: use DDD + número.' });
   if (mensalidade !== undefined && !(Number.isInteger(mensalidade) && mensalidade > 0 && mensalidade <= 10000000)) {
@@ -438,6 +440,7 @@ app.put('/api/admin/config', exigirAdmin, (req, res) => {
   }
   if (diasAviso !== undefined) gravarConfig('dias_aviso', diasAviso);
   if (whats !== undefined) gravarConfig('whatsapp_ar', whats);
+  if (novoPix !== undefined) gravarConfig('pix', novoPix.chave ? JSON.stringify(novoPix) : '');
   if (mensagem !== undefined) gravarConfig('mensagem_aviso', String(mensagem).replace(/\r/g, '').trim().slice(0, 2000));
   auditar(req, 'alterou as configurações de assinatura');
   res.json(lerConfig());

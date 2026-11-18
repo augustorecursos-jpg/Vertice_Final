@@ -911,7 +911,57 @@
     };
   }
 
+  // ---------- Pix (BR Code estático do Banco Central) ----------
+  const semAcento = (s) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\x20-\x7E]/g, '').replace(/\s+/g, ' ').trim();
+  function cpfValido(d) {
+    if (!/^\d{11}$/.test(d) || /^(\d)\1{10}$/.test(d)) return false;
+    const dv = (n) => { let s = 0; for (let i = 0; i < n; i++) s += +d[i] * (n + 1 - i); const r = (s * 10) % 11; return r === 10 ? 0 : r; };
+    return dv(9) === +d[9] && dv(10) === +d[10];
+  }
+  /** Normaliza a chave Pix: CPF, CNPJ, e-mail, celular (+55…) ou chave aleatória. Devolve { chave, tipo } ou null. */
+  function chavePix(v) {
+    const t = String(v ?? '').trim();
+    if (!t) return null;
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(t)) return { chave: t.toLowerCase(), tipo: 'aleatoria' };
+    if (t.includes('@')) return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t) && t.length <= 77 ? { chave: t.toLowerCase(), tipo: 'email' } : null;
+    const d = t.replace(/\D/g, '');
+    const pareceTelefone = /^\+|\(|^\d{2}\s?9\d{4}/.test(t) && !/[./]/.test(t);
+    if (d.length === 14 && !t.startsWith('+')) return { chave: d, tipo: 'cnpj' };
+    if (d.length === 11 && !pareceTelefone && cpfValido(d)) return { chave: d, tipo: 'cpf' };
+    if (d.length === 13 && d.startsWith('55')) return { chave: '+' + d, tipo: 'celular' };
+    if (d.length === 10 || d.length === 11) return { chave: '+55' + d, tipo: 'celular' };
+    return null;
+  }
+  /** Dados do Pix guardados na configuração. Vazio = sem Pix. Inválido = null. */
+  function limparPix(x) {
+    if (!x || !String(x.chave ?? '').trim()) return { chave: '', tipo: '', nome: '', cidade: '' };
+    const c = chavePix(x.chave);
+    const nome = semAcento(x.nome).slice(0, 25), cidade = semAcento(x.cidade).slice(0, 15);
+    if (!c || !nome || !cidade) return null;
+    return { chave: c.chave, tipo: c.tipo, nome, cidade };
+  }
+  function crc16(s) {
+    let c = 0xFFFF;
+    for (let i = 0; i < s.length; i++) {
+      c ^= s.charCodeAt(i) << 8;
+      for (let j = 0; j < 8; j++) c = c & 0x8000 ? ((c << 1) ^ 0x1021) & 0xFFFF : (c << 1) & 0xFFFF;
+    }
+    return c.toString(16).toUpperCase().padStart(4, '0');
+  }
+  /** "Pix copia e cola" com valor (o mesmo texto vai dentro do QR Code). */
+  function pixCopiaECola(pix, centavos, txid = '***') {
+    const p = limparPix(pix);
+    if (!p || !p.chave) return '';
+    const campo = (id, v) => id + String(v.length).padStart(2, '0') + v;
+    const id = String(txid || '***').replace(/[^A-Za-z0-9]/g, '').slice(0, 25) || '***';
+    const corpo = campo('00', '01') + campo('26', campo('00', 'br.gov.bcb.pix') + campo('01', p.chave)) + campo('52', '0000') + campo('53', '986')
+      + (centavos > 0 ? campo('54', (centavos / 100).toFixed(2)) : '') + campo('58', 'BR') + campo('59', p.nome) + campo('60', p.cidade)
+      + campo('62', campo('05', id)) + '6304';
+    return corpo + crc16(corpo);
+  }
+
   return {
+    chavePix, limparPix, pixCopiaECola, crc16,
     LIMITES_PLANO, novoPlano, totaisPlano, limparPlano, csvPlano,
     CARTOES_SUGERIDOS, mesmoCartao, painel, detalhesCategoria, periodoAnterior, variacao,
     TIPOS_GASTO, TIPO, sugerirTipoGasto, gastos,

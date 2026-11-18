@@ -57,6 +57,7 @@
     chave: '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/>',
     camera: '<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="13" r="3.5"/>',
     imagem: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/>',
+    pix: '<path d="M12 2.5 21.5 12 12 21.5 2.5 12z"/><path d="M7.5 8.5c1.4 0 2.3.6 3.2 1.5L12 11.3l1.3-1.3c.9-.9 1.8-1.5 3.2-1.5M7.5 15.5c1.4 0 2.3-.6 3.2-1.5l1.3-1.3 1.3 1.3c.9.9 1.8 1.5 3.2 1.5"/>',
     copiar: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
     sair: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
     usuarios: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
@@ -2332,6 +2333,7 @@
         $('#cfg-whats').value = formatarTelefone(cfg.whatsappAR);
         $('#cfg-dias').value = cfg.diasAviso;
         $('#cfg-msg').value = cfg.mensagem;
+        pixCfg?.preencher(cfg.pix);
       }
       $('#auditoria').innerHTML = aud.length
         ? aud.map((a) => `<li><time>${esc(dataHora(a.criado_em))}</time><span><b>${esc(a.usuario)}</b> ${esc(a.acao)}${a.detalhe ? ` · <span class="suave">${esc(a.detalhe)}</span>` : ''}</span></li>`).join('')
@@ -2375,7 +2377,7 @@
   }
 
   /** Preenche a mensagem padrão com os dados do usuário. */
-  function montarMensagem(u, modelo = configAssin.mensagem, precos = configAssin.precos) {
+  function montarMensagem(u, modelo = configAssin.mensagem, precos = configAssin.precos, periodo = N.PERIODO[u.periodo] ? u.periodo : 'mensal', pix = configAssin.pix) {
     const a = u.assinatura || {};
     const prazo = a.cod === 'vencida' ? `venceu há ${-a.dias} ${a.dias === -1 ? 'dia' : 'dias'}`
       : a.cod === 'hoje' ? 'hoje' : a.dias === 1 ? 'amanhã' : `daqui a ${a.dias} dias`;
@@ -2384,31 +2386,162 @@
       nome: String(u.nome || '').trim().split(/\s+/)[0], vencimento: dataBR(u.assinaturaVence), prazo, valor: moeda(precos[plano].mensal),
       opcoes: N.opcoesAssinatura(precos, plano), periodo: (N.PERIODO[u.periodo] || N.PERIODO.mensal).nome.toLowerCase(),
     };
-    return modelo.replace(/\{(nome|vencimento|prazo|valor|opcoes|periodo)\}/g, (_, k) => valores[k]);
+    valores.pix = blocoPix(u, periodo, precos, pix).texto;
+    // Mensagem antiga, sem {pix}: o Pix entra no final.
+    const base = valores.pix && !modelo.includes('{pix}') ? `${modelo.trimEnd()}\n\n{pix}` : modelo;
+    return base.replace(/\{(nome|vencimento|prazo|valor|opcoes|periodo|pix)\}/g, (_, k) => valores[k]).replace(/\n{3,}/g, '\n\n').trim();
   }
 
-  function enviarAviso(u) {
+  // ---------- Pix das renovações ----------
+  let qrLib = null;
+  function carregarQr() {
+    if (window.qrcode) return Promise.resolve(window.qrcode);
+    return (qrLib ||= new Promise((ok, falha) => {
+      const s = document.createElement('script');
+      s.src = '/vendor/qrcode/qrcode.js';
+      s.onload = () => ok(window.qrcode);
+      s.onerror = () => { qrLib = null; falha(new Error('Não foi possível gerar o QR Code. Verifique a internet.')); };
+      document.head.append(s);
+    }));
+  }
+  /** Imagem do QR Code com o valor embaixo, pronta para compartilhar ou baixar. */
+  async function imagemPix(codigo, valor, legenda) {
+    const qrcode = await carregarQr();
+    const q = qrcode(0, 'M'); q.addData(codigo); q.make();
+    const n = q.getModuleCount(), cel = 12, margem = cel * 4, lado = n * cel + margem * 2;
+    const c = document.createElement('canvas');
+    c.width = lado; c.height = lado + 120;
+    const x = c.getContext('2d');
+    x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+    x.fillStyle = '#0c1f47';
+    for (let r = 0; r < n; r++) for (let k = 0; k < n; k++) if (q.isDark(r, k)) x.fillRect(margem + k * cel, margem + r * cel, cel, cel);
+    x.textAlign = 'center';
+    x.font = '800 44px Montserrat, Arial, sans-serif'; x.fillText(valor, lado / 2, lado + 30);
+    x.fillStyle = '#5b6b82'; x.font = '600 22px Montserrat, Arial, sans-serif'; x.fillText(legenda, lado / 2, lado + 72);
+    return c;
+  }
+  const pixAtivo = () => !!configAssin?.pix?.chave;
+  /** Bloco do Pix que entra na mensagem no lugar de {pix}. */
+  function blocoPix(u, periodo, precos = configAssin.precos, pix = configAssin.pix) {
+    const plano = planoDe(u);
+    const p = N.precoPeriodo(precos, plano, periodo);
+    const codigo = N.pixCopiaECola(pix, p.total, txidPix(u));
+    if (!codigo) return { texto: '', codigo: '', total: p.total };
+    return { texto: `Para renovar no plano ${N.PERIODO[periodo].nome.toLowerCase()} (${moeda(p.total)}), pague pelo Pix copia e cola:\n${codigo}`, codigo, total: p.total };
+  }
+  const txidPix = (u) => (u.empresa ? `VERTEMP${u.id}` : `VERTPF${u.id}`);
+
+  function ligarPixConfig() {
+    const campos = ['#cfg-pix-chave', '#cfg-pix-nome', '#cfg-pix-cidade'];
+    const ler = () => ({ chave: $('#cfg-pix-chave').value, nome: $('#cfg-pix-nome').value, cidade: $('#cfg-pix-cidade').value });
+    let vez = 0;
+    async function previa() {
+      const minha = ++vez;
+      const dados = ler();
+      const p = N.limparPix(dados);
+      const info = $('#cfg-pix-info'), box = $('#cfg-pix-qr');
+      if (!dados.chave.trim()) { info.textContent = 'Sem chave Pix: a mensagem vai sem QR Code.'; box.innerHTML = `<div class="qr-vazio">${ic('pix')}<small>O QR Code aparece aqui</small></div>`; return; }
+      const tipo = N.chavePix(dados.chave);
+      if (!p) {
+        info.innerHTML = `<span class="txt-erro">${!tipo ? 'Chave não reconhecida: use CPF, CNPJ, e-mail, celular com DDD ou a chave aleatória.' : 'Preencha o nome do recebedor e a cidade.'}</span>`;
+        box.innerHTML = `<div class="qr-vazio">${ic('pix')}<small>Complete os dados</small></div>`; return;
+      }
+      info.innerHTML = `Chave do tipo <b>${{ cpf: 'CPF', cnpj: 'CNPJ', email: 'e-mail', celular: 'celular', aleatoria: 'aleatória' }[p.tipo]}</b>: ${esc(p.chave)}. Faça um teste: escaneie a prévia com o app do seu banco e confira o seu nome antes de pagar.`;
+      const precos = N.limparPrecos(lerPrecos()) || configAssin.precos;
+      const total = N.precoPeriodo(precos, 'pf', 'mensal').total;
+      try {
+        const c = await imagemPix(N.pixCopiaECola(p, total, 'TESTE'), moeda(total), 'Prévia · plano mensal');
+        if (minha === vez) { box.innerHTML = ''; box.append(c); box.insertAdjacentHTML('beforeend', '<small>Prévia com o plano mensal de pessoa física</small>'); }
+      } catch (e) { box.innerHTML = `<small class="txt-erro">${esc(e.message)}</small>`; }
+    }
+    campos.forEach((s) => $(s).addEventListener('input', previa));
+    return {
+      preencher(pix) { if (campos.some((s) => $(s) === document.activeElement)) return; $('#cfg-pix-chave').value = pix?.chave || ''; $('#cfg-pix-nome').value = pix?.nome || ''; $('#cfg-pix-cidade').value = pix?.cidade || ''; previa(); },
+      ler,
+    };
+  }
+  let pixCfg = null;
+
+  function enviarAviso(u0, nomeEmpresa = null) {
+    const u = nomeEmpresa ? { ...u0, empresa: true } : u0;
     const tel = String(u.telefone || '').replace(/\D/g, '');
     const telIntl = tel && (tel.length <= 11 ? '55' + tel : tel);
     const email = /@/.test(u.login) ? u.login : '';
+    let periodo = N.PERIODO[u.periodo] ? u.periodo : 'mensal';
+    const comPix = pixAtivo();
     const { modal } = abrirModal(`
-      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="t-aviso">
+      <div class="modal ${comPix ? 'aviso-largo' : ''}" role="dialog" aria-modal="true" aria-labelledby="t-aviso">
         <div class="cab-modal"><h2 id="t-aviso">Aviso de vencimento</h2>
           <button type="button" class="btn fantasma icone" data-fechar aria-label="Fechar"><i data-ic="x"></i></button></div>
-        <p style="margin-top:0">Para <b>${esc(u.nome)}</b> · assinatura ${u.assinatura.cod === 'vencida' ? 'venceu' : 'vence'} em <b>${dataBR(u.assinaturaVence)}</b> · plano atual ${tagPlano(u)}</p>
-        <label class="rotulo" for="aviso-texto">Mensagem <small>(pode ajustar antes de enviar)</small></label>
-        <textarea id="aviso-texto" rows="12">${esc(montarMensagem(u))}</textarea>
+        <p style="margin-top:0">Para <b>${esc(nomeEmpresa ? `${u.nome} · ${nomeEmpresa}` : u.nome)}</b> · assinatura ${u.assinatura.cod === 'vencida' ? 'venceu' : 'vence'} em <b>${dataBR(u.assinaturaVence)}</b> · plano atual ${tagPlano(u)}</p>
+        <div class="aviso-corpo">
+          <div class="aviso-msg-col">
+            <label class="rotulo" for="aviso-texto">Mensagem <small>(pode ajustar antes de enviar)</small></label>
+            <textarea id="aviso-texto" rows="14">${esc(montarMensagem(u, undefined, undefined, periodo))}</textarea>
+          </div>
+          ${comPix ? `<div class="pix-lado">
+            <div class="pix-tit">${ic('pix')} Pix da renovação</div>
+            <div class="pilulas mini" role="group" aria-label="Período do Pix">${N.PERIODOS.map((pe) => `<label><input type="radio" name="aviso-per" value="${pe.id}" ${pe.id === periodo ? 'checked' : ''}><span>${esc(pe.nome)}</span></label>`).join('')}</div>
+            <div class="qr-box" id="aviso-qr"></div>
+            <button type="button" class="btn sec peq" data-pix="compartilhar">${ic('enviar')} Compartilhar imagem do QR</button>
+            <button type="button" class="btn fantasma peq" data-pix="baixar">${ic('baixar')} Baixar imagem</button>
+            <button type="button" class="btn fantasma peq" data-pix="copiar">${ic('copiar')} Copiar só o Pix copia e cola</button>
+            <p class="dica" style="margin:0">Começa no período atual do cliente. Se ele pedir outro, troque acima: o QR e a mensagem mudam juntos.</p>
+          </div>` : ''}
+        </div>
         <div class="canais">
           <button type="button" class="btn whats" data-canal="whatsapp">${ic('mensagem')} WhatsApp${tel ? '' : ' (escolher contato)'}</button>
           ${email ? `<button type="button" class="btn sec" data-canal="email">${ic('email')} E-mail</button>` : ''}
           <button type="button" class="btn sec" data-canal="copiar">${ic('copiar')} Copiar texto</button>
         </div>
-        <p class="dica">${tel ? `WhatsApp abre a conversa com ${esc(formatarTelefone(tel))}.` : 'Sem telefone cadastrado: o WhatsApp abre para você escolher o contato. Cadastre o telefone em “Editar”.'}</p>
-      </div>`, { estreito: true });
+        <p class="dica">${tel ? `WhatsApp abre a conversa com ${esc(formatarTelefone(tel))}.` : 'Sem telefone cadastrado: o WhatsApp abre para você escolher o contato. Cadastre o telefone em “Editar”.'}
+          ${comPix ? ' O WhatsApp recebe só o texto (com o Pix copia e cola); a imagem do QR vai por “Compartilhar” (celular) ou “Baixar” e anexar (computador).' : ' Cadastre sua chave Pix em “Planos, preços e avisos” para mandar o QR Code junto.'}</p>
+      </div>`, { estreito: !comPix });
+    const ta = $('#aviso-texto', modal);
+    let atual = comPix ? blocoPix(u, periodo) : null;
+    let imagem = null;
+    async function desenharQr() {
+      if (!comPix) return;
+      const pe = N.PERIODO[periodo];
+      const box = $('#aviso-qr', modal);
+      try {
+        imagem = await imagemPix(atual.codigo, moeda(atual.total), `Vértice · plano ${pe.nome.toLowerCase()}`);
+        box.innerHTML = ''; box.append(imagem);
+        box.insertAdjacentHTML('beforeend', `<small>${esc(pe.nome)}${pe.id === u.periodo ? ' · período atual' : ''}</small>`);
+      } catch (e) { box.innerHTML = `<small class="txt-erro">${esc(e.message)}</small>`; }
+    }
+    desenharQr();
+    modal.addEventListener('change', (e) => {
+      if (e.target.name !== 'aviso-per') return;
+      periodo = e.target.value;
+      const novo = blocoPix(u, periodo);
+      // Troca só o trecho do Pix; o resto do texto (que você pode ter editado) fica.
+      ta.value = atual.texto && ta.value.includes(atual.texto) ? ta.value.replace(atual.texto, novo.texto) : `${ta.value.trimEnd()}\n\n${novo.texto}`;
+      atual = novo;
+      desenharQr();
+    });
+    const arquivoQr = () => new Promise((ok) => imagem.toBlob((b) => ok(new File([b], `pix-vertice-${periodo}.png`, { type: 'image/png' })), 'image/png'));
     modal.addEventListener('click', async (e) => {
+      const p = e.target.closest('[data-pix]');
+      if (p && imagem) {
+        if (p.dataset.pix === 'copiar') {
+          try { await navigator.clipboard.writeText(atual.codigo); toast('Pix copia e cola copiado.'); } catch { toast('Não foi possível copiar.', { erro: true }); }
+          return;
+        }
+        const arq = await arquivoQr();
+        if (p.dataset.pix === 'compartilhar' && navigator.canShare?.({ files: [arq] })) {
+          try { await navigator.share({ files: [arq], text: `Pix da renovação do Vértice · ${moeda(atual.total)}` }); } catch { /* cancelado */ }
+          return;
+        }
+        const url = URL.createObjectURL(arq);
+        const a = Object.assign(document.createElement('a'), { href: url, download: arq.name });
+        document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000);
+        if (p.dataset.pix === 'compartilhar') toast('Este navegador não compartilha imagens: a imagem foi baixada para você anexar na conversa.', { tempo: 7000 });
+        return;
+      }
       const b = e.target.closest('[data-canal]');
       if (!b) return;
-      const texto = $('#aviso-texto', modal).value.trim();
+      const texto = ta.value.trim();
       if (b.dataset.canal === 'whatsapp') window.open(`https://wa.me/${telIntl || ''}?text=${encodeURIComponent(texto)}`, '_blank', 'noopener');
       if (b.dataset.canal === 'email') location.href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent('Sua assinatura do Vértice')}&body=${encodeURIComponent(texto)}`;
       if (b.dataset.canal === 'copiar') {
@@ -2426,6 +2559,7 @@
 
   function ligarConfigAssinaturas() {
     const form = $('#cfg-assin');
+    pixCfg = ligarPixConfig();
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const precos = lerPrecos();
@@ -2433,7 +2567,7 @@
       if (ruim) { ruim.focus(); return toast('Confira os preços: todos precisam ser maiores que zero, por exemplo 11,99.', { erro: true }); }
       try {
         configAssin = { ...configAssin, ...(await api('PUT', '/api/admin/config', {
-          precos, diasAviso: Math.floor(+$('#cfg-dias').value), mensagem: $('#cfg-msg').value, whatsappAR: $('#cfg-whats').value.trim(),
+          precos, diasAviso: Math.floor(+$('#cfg-dias').value), mensagem: $('#cfg-msg').value, whatsappAR: $('#cfg-whats').value.trim(), pix: pixCfg.ler(),
         })) };
         toast('Configurações de assinatura salvas.');
         renderUsuarios();
@@ -2445,7 +2579,7 @@
     $('#cfg-previa').addEventListener('click', () => {
       const exemplo = { nome: 'Maria Clara', plano: 'pf', periodo: 'mensal', assinaturaVence: new Date(Date.now() + 3 * 864e5).toLocaleDateString('sv-SE'), assinatura: { cod: 'aviso', dias: 3 } };
       const precos = N.limparPrecos(lerPrecos()) || configAssin.precos;
-      const txt = montarMensagem(exemplo, $('#cfg-msg').value, precos);
+      const txt = montarMensagem({ ...exemplo, id: 0 }, $('#cfg-msg').value, precos, 'mensal', N.limparPix(pixCfg.ler()) || configAssin.pix);
       abrirModal(`<div class="modal" role="dialog" aria-modal="true" aria-labelledby="t-previa"><div class="cab-modal"><h2 id="t-previa">Prévia da mensagem</h2>
         <button type="button" class="btn fantasma icone" data-fechar aria-label="Fechar"><i data-ic="x"></i></button></div>
         <div class="previa-msg">${esc(txt)}</div><div class="rodape-modal"><button type="button" class="btn" data-fechar>Fechar</button></div></div>`, { estreito: true });
