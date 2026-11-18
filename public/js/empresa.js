@@ -250,6 +250,7 @@
       const { modal, fechar } = abrirModal(`
         <form class="modal" role="dialog" aria-modal="true" aria-labelledby="t-pjl" novalidate>
           <div class="cab-modal"><h2 id="t-pjl">${l ? 'Editar lançamento' : 'Novo lançamento'}</h2><button type="button" class="btn fantasma icone" data-fechar aria-label="Fechar"><i data-ic="x"></i></button></div>
+          ${l ? '' : window.VerticeLeitura.zonaHtml(ic)}
           <div class="grade-form">
             <fieldset class="inteiro pilulas" id="pjl-tipo"><legend class="rotulo" style="padding:0;margin-bottom:.45em">Tipo</legend>
               <label><input type="radio" name="pjl-tipo" value="pagar" ${tipo0 === 'pagar' ? 'checked' : ''}><span>${ic('desce')} A pagar</span></label>
@@ -280,6 +281,63 @@
         if ($('#pjl-pago-rot', modal)) $('#pjl-pago-rot', modal).textContent = tipo() === 'receber' ? 'Já foi recebido' : 'Já foi pago';
       };
       atualizarTipo();
+      // ---------- preencher a partir de foto ou PDF (lido no próprio aparelho) ----------
+      const LT = window.VerticeLeitor, LV = window.VerticeLeitura;
+      let duplicatas = null;
+      const zona = l ? null : LV.ligarZona(modal, (ex) => aplicarLeitura(ex));
+      function aplicarLeitura(ex) {
+        const r = LT.ler(ex.texto), foto = ex.origem === 'foto';
+        if (!r.centavos && !r.vencimento) throw new Error(foto ? 'Não encontramos valor nem data nesta foto. Tente de novo mais de perto, com o papel reto e boa luz, ou preencha à mão.' : 'Não encontramos valor nem vencimento neste arquivo. Tente outro arquivo ou preencha à mão.');
+        const disparar = (el) => el.dispatchEvent(new Event('change', { bubbles: true }));
+        const radio = (nome, v) => { const x = $(`input[name=${nome}][value=${v}]`, modal); if (x && !x.checked) { x.checked = true; disparar(x); } };
+        radio('pjl-tipo', 'pagar');
+        const parte = r.emitente || (r.tipo === 'recibo' ? r.desc : '') || '';
+        if (r.desc) $('#pjl-desc', modal).value = r.desc;
+        if (parte) $('#pjl-parte', modal).value = parte.slice(0, 80);
+        if (r.centavos) $('#pjl-valor', modal).value = N.valorParaCampo(r.centavos);
+        if (r.vencimento) $('#pjl-data', modal).value = r.vencimento;
+        const obs = [r.numero ? `NF ${r.numero}` : '', r.cnpj ? `CNPJ ${r.cnpj}` : '', r.linhaDigitavel ? `Linha digitável: ${LT.formatarLinha(r.linhaDigitavel)}` : ''].filter((x) => x && !$('#pjl-obs', modal).value.includes(x));
+        if (obs.length) $('#pjl-obs', modal).value = [$('#pjl-obs', modal).value.trim(), ...obs].filter(Boolean).join('\n').slice(0, 1000);
+        // Conta e centro: os usados por último com o mesmo fornecedor (ou CNPJ, ou descrição).
+        const nn = (s) => N.normalizar(String(s || '')).replace(/\s+/g, ' ').trim();
+        const anterior = D.lancamentos.filter((x) => (parte && nn(x.parte) && (nn(x.parte) === nn(parte) || nn(parte).startsWith(nn(x.parte)) || nn(x.parte).startsWith(nn(parte))))
+          || (r.cnpj && String(x.obs || '').includes(r.cnpj)) || (!parte && r.desc && nn(x.desc) === nn(r.desc)))
+          .sort((a, b) => (b.criadoEm || 0) - (a.criadoEm || 0))[0];
+        const sugConta = anterior && [...$('#pjl-conta', modal).options].some((o) => o.value === anterior.conta);
+        if (sugConta) $('#pjl-conta', modal).value = anterior.conta;
+        const sugCentro = anterior?.centro && [...$('#pjl-centro', modal).options].some((o) => o.value === anterior.centro);
+        if (sugCentro) $('#pjl-centro', modal).value = anterior.centro;
+        // Duplicatas: uma conta a pagar por vencimento.
+        duplicatas = r.duplicatas.length > 1 ? r.duplicatas : null;
+        $('#pjl-dups', modal)?.remove();
+        if (duplicatas) {
+          radio('pjl-rec', 'parcelada');
+          $('#pjl-qtd', modal).value = duplicatas.length;
+          $('#pjl-valor', modal).value = N.valorParaCampo(duplicatas.reduce((a, d) => a + d.centavos, 0));
+          $('#pjl-qtd-campo', modal).insertAdjacentHTML('afterend', `<div class="inteiro" id="pjl-dups"><span class="rotulo">Parcelas da nota</span>
+            <table class="parc-leit"><thead><tr><th>Parcela</th><th>Vencimento</th><th style="text-align:right">Valor</th></tr></thead><tbody>
+            ${duplicatas.map((d, i) => `<tr><td>${i + 1}/${duplicatas.length}</td><td><input type="date" value="${d.iso}" data-dup="${i}" aria-label="Vencimento da parcela ${i + 1}"></td><td class="num">${moeda(d.centavos)}</td></tr>`).join('')}</tbody></table>
+            <div class="confere ${r.somaConfere === false ? 'nao' : ''}"><span>${ic(r.somaConfere === false ? 'alerta' : 'check')} ${r.somaConfere === false ? 'As parcelas não somam o total da nota: confira' : 'Parcelas = valor total da nota'}</span><span>${moeda(duplicatas.reduce((a, d) => a + d.centavos, 0))}</span></div></div>`);
+        } else radio('pjl-rec', 'unica');
+        const titulo = { nota: 'Nota fiscal lida.', boleto: 'Boleto lido.', recibo: foto ? 'Recibo lido da foto.' : 'Recibo lido.', fatura: 'Fatura lida.' }[r.tipo] || (foto ? 'Foto lida.' : 'Arquivo lido.');
+        const partes = [];
+        if (duplicatas) partes.push(`Encontramos ${duplicatas.length} duplicatas: o Vértice vai criar ${duplicatas.length} contas a pagar, uma em cada vencimento.`);
+        if (r.linhaDigitavel && r.certeza.centavos) partes.push('Valor e vencimento vieram da linha digitável, que é exata.');
+        if (sugConta) partes.push('Conta e centro de custo sugeridos pelo último lançamento deste fornecedor.');
+        if (foto) partes.push('Leitura de foto pode errar: confira o valor antes de salvar.');
+        if (!r.vencimento) partes.push('Não achamos a data: escolha o vencimento.');
+        const confira = foto || r.somaConfere === false;
+        const aviso = `<div class="status-leit ${confira ? 'conf' : ''}">${ic(confira ? 'alerta' : 'check')}<div><b>${esc(titulo)}</b> ${esc(partes.join(' '))}</div></div>
+          ${r.tipo === 'recibo' ? `<label class="marcar-linha leit-pago"><input type="checkbox" id="pjl-leit-pago" checked> <span>Já foi pago</span></label>` : ''}`;
+        const conf = LV.montarConferencia(modal, ex, r, { ic, aviso: aviso + LV.PRIVACIDADE(ic, ex), lerOutro: () => zona.escolher('arquivo') });
+        conf.selo($('label[for=pjl-desc]', modal), r.certeza.desc ? 'lido' : 'confira', 'desc');
+        if (parte) conf.selo($('#pjl-parte-rot', modal), r.certeza.emitente ? 'lido' : 'confira', 'emitente');
+        conf.selo($('label[for=pjl-valor]', modal), r.centavos && r.certeza.centavos && !foto ? 'lido' : 'confira', 'centavos');
+        conf.selo($('label[for=pjl-data]', modal), r.vencimento && r.certeza.vencimento ? 'lido' : 'confira', duplicatas ? 'duplicatas' : 'vencimento');
+        if (sugConta) conf.selo($('label[for=pjl-conta]', modal), 'sugerido');
+        if (sugCentro) conf.selo($('label[for=pjl-centro]', modal), 'sugerido');
+        if (r.linhaDigitavel) conf.selo($('label[for=pjl-obs]', modal), 'lido', 'linha');
+      }
       modal.addEventListener('change', (e) => {
         if (e.target.name === 'pjl-tipo') atualizarTipo();
         if (e.target.name === 'pjl-rec') {
@@ -303,6 +361,11 @@
           else {
             const rec = $('input[name=pjl-rec]:checked', modal).value;
             const lista = E.gerarLancamentos({ ...dadosForm, recorrencia: rec, quantidade: +$('#pjl-qtd', modal).value });
+            // Nota com duplicatas: cada parcela com o vencimento e o valor da nota.
+            if (duplicatas && rec === 'parcelada' && lista.length === duplicatas.length && N.lerValor($('#pjl-valor', modal).value) === duplicatas.reduce((a, d) => a + d.centavos, 0)) {
+              lista.forEach((x, i) => { const d = N.lerIso($(`[data-dup="${i}"]`, modal).value) || N.lerIso(duplicatas[i].iso); Object.assign(x, { ano: d.ano, mes: d.mes, dia: d.dia, centavos: duplicatas[i].centavos }); });
+            }
+            if (rec === 'unica' && $('#pjl-leit-pago', modal)?.checked) lista.forEach((x) => { x.pago = true; });
             await api('POST', '/api/empresa/lancamentos', { lancamentos: lista });
           }
           fechar(); await carregar();

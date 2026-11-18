@@ -55,6 +55,8 @@
     cadeado: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
     destravar: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>',
     chave: '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/>',
+    camera: '<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="13" r="3.5"/>',
+    imagem: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/>',
     copiar: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
     sair: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
     usuarios: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
@@ -277,7 +279,25 @@
   }
 
   // ---------- formulário de lançamento ----------
-  function abrirFormulario(existente = null, { data = null } = {}) {
+  /** Celular: o botão + pergunta como começar (foto, arquivo ou digitando). */
+  function escolherInicio() {
+    const { modal, fechar } = abrirModal(`<div class="modal folha-inicio" role="dialog" aria-modal="true" aria-labelledby="t-inicio">
+        <div class="pega" aria-hidden="true"></div>
+        <div class="cab-modal"><div><h2 id="t-inicio">Novo lançamento</h2><p class="suave">Como você quer começar?</p></div>
+          <button type="button" class="btn fantasma icone" data-fechar aria-label="Fechar">${ic('x')}</button></div>
+        <button type="button" class="op" data-inicio="foto"><span class="b">${ic('camera')}</span><span><b>Tirar foto do recibo ou boleto</b><small>Abre a câmera do celular</small></span></button>
+        <button type="button" class="op" data-inicio="arquivo"><span class="b">${ic('imagem')}</span><span><b>Escolher da galeria ou PDF</b><small>Fatura, boleto, conta de consumo, recibo</small></span></button>
+        <button type="button" class="op" data-inicio="digitar"><span class="b ciano">${ic('editar')}</span><span><b>Digitar manualmente</b><small>O formulário de sempre</small></span></button>
+      </div>`, { estreito: true });
+    modal.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-inicio]');
+      if (!b) return;
+      fechar();
+      abrirFormulario(null, { arquivo: b.dataset.inicio === 'digitar' ? null : b.dataset.inicio });
+    });
+  }
+
+  function abrirFormulario(existente = null, { data = null, arquivo = null, leitura = null } = {}) {
     const tpl = $('#tpl-lancamento').content.firstElementChild.cloneNode(true);
     const { fundo, modal, fechar } = abrirModal(tpl.innerHTML);
     const f = (id) => $('#' + id, modal);
@@ -535,6 +555,79 @@
     atualizarSerie();
     f('f-desc').focus();
 
+    // ---------- preencher a partir de foto ou PDF (lido no próprio aparelho) ----------
+    const LT = window.VerticeLeitor, LV = window.VerticeLeitura;
+    let zona = null;
+    if (!existente) { f('f-zona').outerHTML = LV.zonaHtml(ic); zona = LV.ligarZona(modal, (ex) => aplicarLeitura(ex)); }
+    else f('f-zona').remove();
+    function aplicarLeitura(ex, r = LT.ler(ex.texto), { edicao = false } = {}) {
+      const foto = ex.origem === 'foto';
+      if (!r.centavos && !r.vencimento && !r.compras.length) {
+        throw new Error(foto ? 'Não encontramos valor nem data nesta foto. Tente de novo mais de perto, com o papel reto e boa luz, ou preencha à mão.'
+          : 'Não encontramos valor nem vencimento neste arquivo. Tente outro arquivo ou preencha à mão.');
+      }
+      const disparar = (el, tipo) => el.dispatchEvent(new Event(tipo, { bubbles: true }));
+      if (!edicao) {
+        const radio = $(`input[name=cat][value="${r.categoria}"]`, modal);
+        if (radio) { radio.checked = true; disparar(radio, 'change'); }
+        if (r.desc) { f('f-desc').value = r.desc; tipoManual = false; disparar(f('f-desc'), 'input'); }
+        if (r.cartao) cartaoSel.definir(r.cartao);
+        const unica = $('input[name=rec][value=unica]', modal);
+        if (unica && !unica.checked) { unica.checked = true; disparar(unica, 'change'); }
+      }
+      if (r.centavos) f('f-valor').value = N.valorParaCampo(r.centavos);
+      if (r.vencimento) { f('f-data').value = r.vencimento; disparar(f('f-data'), 'change'); }
+      if (r.compras.length && val('cat') === 'cartao') {
+        compras = r.compras.map((c) => ({ desc: c.desc, centavos: c.centavos, tipoGasto: N.sugerirTipoGasto(c.desc, dados.lancamentos), fixa: false, tipoManual: false }));
+        detalhar = true; valorManual = !!r.centavos; notaFixas = '';
+        desenharCompras(); mostrarTipo();
+      }
+      const extras = [];
+      if (r.linhaDigitavel) extras.push(`Linha digitável: ${LT.formatarLinha(r.linhaDigitavel)}`);
+      if (r.tipo === 'recibo' && r.cnpj) extras.push(`CNPJ ${r.cnpj}`);
+      const novosExtras = extras.filter((x) => !f('f-obs').value.includes(x));
+      if (novosExtras.length) { f('f-obs').value = [f('f-obs').value.trim(), ...novosExtras].filter(Boolean).join('\n').slice(0, N.MAX_OBS); contarObs(); }
+      atualizarSerie();
+
+      // Mensagem do topo
+      const confira = foto || r.somaConfere === false;
+      const titulo = { boleto: 'Boleto lido.', fatura: `Fatura lida: ${r.compras.length} ${r.compras.length === 1 ? 'compra' : 'compras'}.`, recibo: foto ? 'Recibo lido da foto.' : 'Recibo lido.', nota: 'Nota fiscal lida.' }[r.tipo] || (foto ? 'Foto lida.' : 'Arquivo lido.');
+      const partes = [];
+      if (r.linhaDigitavel && r.certeza.centavos) partes.push('Valor e vencimento vieram da linha digitável, que é exata.');
+      if (r.tipo === 'fatura' && r.compras.length) {
+        partes.push(r.somaConfere ? 'A soma das compras bate com o total da fatura.' : r.somaConfere === false ? `A soma das compras (${moeda(r.compras.reduce((a, c) => a + c.centavos, 0) - r.creditos.reduce((a, c) => a + c.centavos, 0))}) não bate com o total: confira se faltou alguma compra ou página.` : '');
+        partes.push('Cada compra veio com um tipo de gasto sugerido; troque se precisar.');
+        if (r.creditos.length) partes.push(`${r.creditos.length === 1 ? '1 estorno' : `${r.creditos.length} estornos`} de ${moeda(r.creditos.reduce((a, c) => a + c.centavos, 0))} descontado${r.creditos.length === 1 ? '' : 's'} da soma.`);
+      }
+      if (foto) partes.push('Leitura de foto pode errar: confira o valor antes de salvar.');
+      if (!r.vencimento) partes.push('Não achamos a data: escolha o vencimento.');
+      else if (!r.centavos) partes.push('Não achamos o valor: digite o valor.');
+      if (!r.desc) partes.push('Dê um nome para o lançamento.');
+      // Já existe esse lançamento no mês? Melhor atualizar do que duplicar.
+      const d = N.lerIso(f('f-data').value);
+      const igual = !edicao && d && dados.lancamentos.find((x) => x.ano === d.ano && x.mes === d.mes && !x.pago
+        && ((r.tipo === 'fatura' && x.categoria === 'cartao' && r.cartao && N.mesmoCartao(x.cartao, r.cartao) && (x.compras?.length || /fatura/i.test(x.desc)))
+          || (r.desc && N.normalizar(x.desc).trim() === N.normalizar(r.desc).trim())));
+      const aviso = `<div class="status-leit ${confira ? 'conf' : ''}">${ic(confira ? 'alerta' : 'check')}<div><b>${esc(titulo)}</b> ${esc(partes.filter(Boolean).join(' '))}</div></div>
+        ${igual ? `<div class="aviso-box info leit-igual">${ic('repetir')}<div>Você já tem <b>${esc(igual.desc)}</b> em ${MESES[igual.mes].toLowerCase()} (${moeda(igual.centavos)}). Para não duplicar, atualize esse lançamento com o que foi lido.</div>
+          <button type="button" class="btn sec peq" data-leit-atualizar>Atualizar esse lançamento</button></div>` : ''}
+        ${r.tipo === 'recibo' && !edicao ? `<label class="marcar-linha leit-pago"><input type="checkbox" id="f-leit-pago" checked> <span>Já foi pago</span></label>` : ''}`;
+      const conf = LV.montarConferencia(modal, ex, r, { ic, aviso: aviso + LV.PRIVACIDADE(ic, ex), lerOutro: zona ? () => zona.escolher('arquivo') : null });
+      if (!edicao) {
+        conf.selo($('#f-categorias legend', modal), 'sugerido');
+        conf.selo($('label[for=f-desc]', modal), r.certeza.desc ? 'lido' : 'confira', 'desc');
+        if (r.cartao) conf.selo($('label[for=f-cartao]', modal), 'lido');
+      }
+      conf.selo(f('rotulo-valor'), r.centavos && r.certeza.centavos && !foto ? 'lido' : 'confira', 'centavos');
+      conf.selo($('label[for=f-data]', modal), r.vencimento && r.certeza.vencimento ? 'lido' : 'confira', 'vencimento');
+      if (r.linhaDigitavel) conf.selo($('label[for=f-obs]', modal), 'lido', 'linha');
+      if (!f('bloco-tipo').hidden && !edicao) conf.selo($('#bloco-tipo legend', modal), 'sugerido');
+      $('[data-leit-atualizar]', modal)?.addEventListener('click', () => { fechar(); abrirFormulario(igual, { leitura: { ex, r } }); });
+      (r.tipo === 'fatura' ? $('#bloco-compras', modal) : f('f-desc')).scrollIntoView?.({ block: 'nearest' });
+    }
+    if (leitura) { try { aplicarLeitura(leitura.ex, leitura.r, { edicao: true }); } catch (e) { toast(e.message, { erro: true }); } }
+    if (arquivo && zona) zona.escolher(arquivo);
+
     function erro(campo, msg) {
       f('e-' + campo).textContent = msg;
       f('f-' + campo).setAttribute('aria-invalid', msg ? 'true' : 'false');
@@ -591,6 +684,7 @@
       const qtd = Math.floor(+f('f-qtd').value);
       if (rec !== 'unica' && !(qtd >= 2 && qtd <= 120)) { f('f-qtd').focus(); return toast('A quantidade deve ficar entre 2 e 120.', { erro: true }); }
       const novos = N.gerar({ desc, obs: f('f-obs').value.trim(), provisao, cartao, tipoGasto, centavos, categoria, compras: comprasFinal, ...data, recorrencia: rec, quantidade: qtd, modoValor: val('modo') });
+      if (rec === 'unica' && $('#f-leit-pago', modal)?.checked) novos.forEach((n) => { n.pago = true; });
       dados.lancamentos.push(...novos);
       fechar(); salvar();
       const msg = novos.length > 1 ? `${novos.length} lançamentos criados.` : 'Lançamento criado.';
@@ -2736,7 +2830,7 @@
   document.addEventListener('click', (e) => {
     const alvo = e.target.closest('button, a');
     if (!alvo) return;
-    if (alvo.matches('[data-novo]')) return abrirFormulario();
+    if (alvo.matches('[data-novo]')) return alvo.classList.contains('fab') ? escolherInicio() : abrirFormulario();
     if (alvo.matches('[data-exportar]')) return exportar();
     if (alvo.matches('[data-sair]')) return sair();
     if (alvo.matches('[data-trocar-senha]')) return trocarSenha();
