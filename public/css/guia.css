@@ -136,3 +136,5 @@ table.tab td:first-child { white-space: nowrap; font-weight: 700; color: var(--m
   .pagina:last-of-type { page-break-after: auto; break-after: auto; }
   figure, .dica, .atencao, .exemplo, table.tab, .preco { break-inside: avoid; }
 }
+.sumario.duas-col { grid-template-columns: 1fr 1fr; column-gap: 1.4em; }
+.sumario.duas-col li { padding: .45em 0; }

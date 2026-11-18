@@ -7,7 +7,9 @@
   "scripts": {
     "start": "node --no-warnings server.js",
     "dev": "node --no-warnings --watch server.js",
-    "test": "node --no-warnings --test test/*.test.js"
+    "test": "node --no-warnings --test test/*.test.js",
+    "guia:imagens": "node --no-warnings scripts/gerar-guia-imagens.js",
+    "guia:pdf": "node scripts/gerar-guia-pdf.js"
   },
   "engines": {
     "node": ">=22.13"

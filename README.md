@@ -79,9 +79,10 @@ Conta de empresa com gestão financeira gerencial. **Quem cria e controla empres
 ## Guia do cliente (e-book)
 
 - **Web:** `/guia` (público, sem login), com link na tela de entrada e em Minha conta. É o link para enviar a um cliente novo junto com o acesso.
-- **PDF:** `public/guia/Guia-Vertice.pdf` (12 páginas A4), também em `/guia/Guia-Vertice.pdf`.
-- **Vértice Empresas:** `/guia-empresas` (público) e `public/guia/Guia-Vertice-Empresas.pdf` (14 páginas A4), com papéis, contas, orçamento e versões, orçado × realizado, DRE, fluxo de caixa, cadastros e equipe. Link em Minha conta da empresa e no painel Empresas da AR.
-- **Atualizar:** edite `public/guia.html` (ou `public/guia-empresas.html`) e gere os PDFs de novo com `LANG=pt_BR.UTF-8 node scripts/gerar-guia-pdf.js` (ou passe só um dos HTML). O script precisa do Playwright e avisa se alguma página passar do tamanho da folha.
+- **PDF:** `public/guia/Guia-Vertice.pdf` (15 páginas A4, com leitura de foto/PDF, calendário, dashboard e simulador), também em `/guia/Guia-Vertice.pdf`.
+- **Vértice Empresas:** `/guia-empresas` (público) e `public/guia/Guia-Vertice-Empresas.pdf` (16 páginas A4), com papéis, contas, leitura de nota fiscal, calendário, orçamento e versões, orçado × realizado, DRE, fluxo de caixa, cadastros e equipe. Link em Minha conta da empresa e no painel Empresas da AR.
+- **Regra:** toda mudança que o cliente vê atualiza os guias na mesma entrega (ver `CLAUDE.md`).
+- **Atualizar:** edite `public/guia.html` (ou `public/guia-empresas.html`), refaça as fotos com `LANG=pt_BR.UTF-8 npm run guia:imagens` (sobe um servidor temporário com as contas de demonstração; não usa dados reais) e gere os PDFs com `LANG=pt_BR.UTF-8 npm run guia:pdf`. Os scripts precisam do Playwright; o dos PDFs avisa se alguma página passar do tamanho da folha.
 
 ## Rodar localmente
 
