@@ -36,9 +36,19 @@ let ana, idAna, senhaAna;
 
 test('páginas e API exigem login', async () => {
   const anon = cliente();
-  const raiz = await anon('GET', '/');
-  assert.equal(raiz.status, 302);
-  assert.equal(raiz.headers.get('location'), '/entrar');
+  // Fora do login, a raiz é a página de apresentação; o app instalado vai para o login.
+  const raiz = await fetch(base + '/');
+  assert.equal(raiz.status, 200);
+  const html = await raiz.text();
+  assert.match(html, /ponto mais alto/);
+  assert.match(html, /R\$ 8,99/); // anual de pessoa física por mês, da tabela de preços
+  assert.match(html, /R\$ 149</);
+  assert.match(html, /wa\.me\/55\d{10,11}\?text=/);
+  assert.doesNotMatch(html, /\{\{\w+\}\}/);
+  const app = await anon('GET', '/?origem=app');
+  assert.equal(app.status, 302);
+  assert.equal(app.headers.get('location'), '/entrar');
+  assert.equal((await fetch(base + '/conheca')).status, 200);
   assert.equal((await anon('GET', '/entrar')).status, 200);
   assert.equal((await anon('GET', '/api/dados')).status, 401);
   assert.equal((await anon('GET', '/api/admin/usuarios')).status, 401);

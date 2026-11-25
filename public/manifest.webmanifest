@@ -3,7 +3,7 @@
   "short_name": "Vértice",
   "description": "Lançamentos, vencimentos, parcelas e visão anual das suas finanças.",
   "lang": "pt-BR",
-  "start_url": "/",
+  "start_url": "/?origem=app",
   "scope": "/",
   "display": "standalone",
   "background_color": "#f2f6fa",

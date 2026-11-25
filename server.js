@@ -172,7 +172,33 @@ app.get('/healthz', (req, res) => res.send('ok'));
 
 // ---------- páginas ----------
 const pagina = (arquivo) => (req, res) => { res.setHeader('Cache-Control', 'no-cache'); res.sendFile(path.join(PUBLICO, arquivo)); };
-app.get('/', (req, res, next) => (usuarioDaSessao(req) ? pagina('index.html')(req, res, next) : res.redirect('/entrar')));
+// Página de apresentação (pública), com os preços e o WhatsApp da configuração.
+const WHATS_PADRAO = '11986345441';
+function paginaInicio(req, res) {
+  const cfg = lerConfig();
+  const tel = String(cfg.whatsappAR || WHATS_PADRAO).replace(/\D/g, '') || WHATS_PADRAO;
+  const intl = tel.length <= 11 ? '55' + tel : tel;
+  const wa = (texto) => `https://wa.me/${intl}?text=${encodeURIComponent(texto)}`;
+  const reais = (c) => (c % 100 ? N.moeda(c) : N.moeda(c).replace(/,00$/, '')).replace(/ /g, ' ');
+  const v = {
+    PF_ANUAL_MES: reais(N.precoPeriodo(cfg.precos, 'pf', 'anual').porMes),
+    PF_MENSAL: reais(cfg.precos.pf.mensal),
+    EMP_ESSENCIAL: reais(cfg.precos.essencial.mensal),
+    WHATS_TEXTO: tel.length === 11 ? `(${tel.slice(0, 2)}) ${tel.slice(2, 7)}-${tel.slice(7)}` : tel,
+    WHATS_CONHECER: wa('Olá! Quero conhecer o Vértice.'),
+    WHATS_DEMO: wa('Olá! Quero uma demonstração do Vértice.'),
+    WHATS_PF: wa('Olá! Quero começar a usar o Vértice (pessoa física).'),
+    WHATS_EMPRESA: wa('Olá! Quero saber mais sobre o Vértice Empresas.'),
+  };
+  const html = fs.readFileSync(path.join(PUBLICO, 'inicio.html'), 'utf8')
+    .replace(/\{\{(\w+)\}\}/g, (m, k) => (k in v ? v[k].replace(/&/g, '&amp;').replace(/"/g, '&quot;') : m));
+  res.setHeader('Cache-Control', 'no-cache');
+  res.type('html').send(html);
+}
+// Logado: o app. Fora: a apresentação. O app instalado (origem=app) vai direto para o login.
+app.get('/', (req, res, next) => (usuarioDaSessao(req) ? pagina('index.html')(req, res, next) : req.query.origem === 'app' ? res.redirect('/entrar') : paginaInicio(req, res)));
+app.get('/conheca', paginaInicio); // a apresentação mesmo para quem está logado (para compartilhar)
+app.get('/inicio.html', (req, res) => res.redirect('/conheca'));
 app.get('/index.html', (req, res) => res.redirect('/'));
 app.get('/guia', pagina('guia.html')); // guia do cliente: público, para enviar antes do primeiro acesso
 app.get('/guia-empresas', pagina('guia-empresas.html')); // guia do Vértice Empresas, também público

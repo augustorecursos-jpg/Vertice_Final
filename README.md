@@ -3,6 +3,13 @@
 Aplicativo web de finanças pessoais com a identidade visual da **AR Consultoria**: marinho, azul e ciano, fonte Montserrat.
 Cada pessoa tem login próprio e vê só os próprios lançamentos. **Só o administrador cria, bloqueia, redefine a senha e exclui contas.** Não existe cadastro público.
 
+## Página de apresentação
+
+- **Endereço:** `/` para quem não está logado (quem está logado vai direto para o app) e `/conheca` sempre, para compartilhar. O app instalado no celular abre em `/?origem=app` e vai direto para o login.
+- **Conteúdo:** abertura, leitura de foto/PDF, calendário, onde estou gastando, simulador, Vértice Empresas, planos e contato. Fundo escuro, telas reais do app (contas de demonstração) e efeito de revelar ao rolar (desligado para quem pede menos movimento).
+- **Preços e WhatsApp** vêm da configuração do painel (*Planos, preços e avisos* e *WhatsApp da AR*); os botões abrem o WhatsApp com uma mensagem pronta.
+- **Arquivos:** `public/inicio.html`, `public/css/inicio.css`, `public/js/inicio.js`; fotos de celular em `public/img/inicio/` (geradas por `npm run guia:imagens`) e as demais reaproveitadas dos guias.
+
 ## Contas e administração
 
 | Ação do administrador | O que acontece |

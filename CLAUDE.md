@@ -11,6 +11,8 @@ App de finanças pessoais e de empresas da AR Consultoria. Node 22 + Express 5 +
 3. PDFs: `npm run guia:pdf` gera `public/guia/Guia-Vertice.pdf` e `Guia-Vertice-Empresas.pdf` e avisa se alguma página estourou.
 4. README: a seção do recurso.
 
+A **página de apresentação** (`public/inicio.html`, em `/` para quem não está logado e em `/conheca`) também acompanha: recurso novo e importante ganha uma seção ou entra numa existente, e as fotos de celular dela saem do mesmo `npm run guia:imagens`. Os preços dela vêm da tabela de preços do painel (não escreva preço fixo no HTML).
+
 Mudança só de administração (painel da AR) entra no README; nos guias, só se o cliente percebe algo (ex.: Pix na mensagem de renovação).
 
 ## Rotina de publicação

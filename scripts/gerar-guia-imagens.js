@@ -1,4 +1,4 @@
-// Refaz as fotos dos guias com as contas de demonstração (nada de dados reais).
+// Refaz as fotos dos guias e da página de apresentação com as contas de demonstração (nada de dados reais).
 // Sobe um servidor temporário, cria a demonstração e tira cada foto no tamanho usado nos guias.
 // Uso: npm run guia:imagens   (precisa do Playwright; veja scripts/gerar-guia-pdf.js)
 // Dica: rode com LANG=pt_BR.UTF-8 para datas no formato brasileiro.
@@ -14,6 +14,7 @@ const L = require('../public/js/leitor');
 
 const IMG = path.join(__dirname, '..', 'public', 'guia', 'img');
 const EMP = path.join(IMG, 'empresas');
+const INICIO = path.join(__dirname, '..', 'public', 'img', 'inicio'); // página de apresentação
 const DESKTOP = { viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1.5 };
 const CELULAR = { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true };
 
@@ -183,6 +184,17 @@ const DOCS = {
     await cel.click('#f-recorrencia label:has(input[value=mensal])'); await cel.waitForTimeout(300);
     await cel.evaluate(() => { document.activeElement?.blur(); document.querySelector('.fundo-modal').scrollTo(0, 0); });
     await salvar(cel, path.join(IMG, '11-celular-form.jpg'));
+
+    // celular para a página de apresentação (as outras fotos de lá são as dos guias)
+    const rolarAte = (p, sel, folga) => p.evaluate(([s, f]) => { const r = document.querySelector(s).getBoundingClientRect(); window.scrollTo(0, r.top + scrollY - f); }, [sel, folga]);
+    await cel.keyboard.press('Escape'); await cel.waitForTimeout(200);
+    await ir(cel, 'calendario', '#calendario .cal-dias'); await rolarAte(cel, '#calendario .cal-grade', 70); await cel.waitForTimeout(300);
+    await salvar(cel, path.join(INICIO, 'celular-calendario.jpg'));
+    await ir(cel, 'dashboard', '.abas-dash'); await cel.click('[data-aba=gastos]'); await cel.waitForTimeout(500);
+    await rolarAte(cel, '.abas-dash', 20); await cel.waitForTimeout(300);
+    await salvar(cel, path.join(INICIO, 'celular-gastos.jpg'));
+    await ir(cel, 'sim', '#simulador .cartao'); await cel.evaluate(() => window.scrollTo(0, 0)); await cel.waitForTimeout(300);
+    await salvar(cel, path.join(INICIO, 'celular-simulador.jpg'));
 
     // ---------- empresa ----------
     const e = await pagina(DESKTOP);
