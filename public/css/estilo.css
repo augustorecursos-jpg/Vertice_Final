@@ -1291,3 +1291,41 @@ button.nome:hover { color: var(--primaria); text-decoration: underline; }
   .pix-cfg .qr-box { max-width: 220px; }
   .aviso-largo .aviso-corpo { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ---------- menu do celular: 4 atalhos + Mais ---------- */
+.nav-celular { display: none; }
+@media (max-width: 920px) {
+  .app .lateral { display: none; }
+  .nav-celular {
+    display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px;
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+    background: linear-gradient(160deg, var(--marinho-800), var(--marinho-950)); box-shadow: 0 -10px 30px -12px rgba(0, 0, 0, .45);
+  }
+  .nav-celular a, .nav-celular button {
+    position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 52px;
+    padding: 7px 2px 6px; border: 0; border-radius: 14px; background: none; color: #c9d6ea; cursor: pointer;
+    font: 700 11.5px var(--titulo, sans-serif); text-decoration: none; white-space: nowrap; min-width: 0;
+  }
+  .nav-celular span { overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  .nav-celular svg.ic { width: 23px; height: 23px; }
+  .nav-celular .ativo { background: #fff; color: var(--marinho-900); }
+  .nav-celular a:focus-visible, .nav-celular button:focus-visible { outline: 3px solid var(--ciano); outline-offset: -3px; }
+  .nav-celular .cont, .folha-mais .cont { position: absolute; top: 2px; left: calc(50% + 6px); min-width: 18px; height: 18px; border-radius: 99px; background: var(--vermelho); color: #fff; font-size: 10.5px; font-weight: 800; display: grid; place-items: center; padding: 0 5px; }
+  .nav-celular .cont.aviso, .folha-mais .cont.aviso { background: var(--ambar); }
+  .principal { padding-bottom: calc(5.4em + env(safe-area-inset-bottom)); }
+  .fab { bottom: calc(5.6em + env(safe-area-inset-bottom)) !important; }
+  #toast { bottom: calc(6.4em + env(safe-area-inset-bottom)); }
+}
+.fundo-modal:has(.folha-mais) { align-items: flex-end; padding: 0; }
+.modal.folha-mais { border-radius: 22px 22px 0 0; padding: .8em 1.1em calc(1.2em + env(safe-area-inset-bottom)); width: min(520px, 100%); }
+.folha-mais .pega { width: 44px; height: 5px; border-radius: 99px; background: #d5dde7; margin: 0 auto .7em; }
+.folha-mais .cab-modal { margin-bottom: .4em; }
+.folha-mais .grupo-m { font-size: .68rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--suave); margin: .9em .2em .5em; }
+.folha-mais .grade-m { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.folha-mais .grade-m a { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 6px 12px; border-radius: 16px; background: #f3f7fb; border: 1px solid #e3ebf4; color: var(--marinho-900); font-weight: 700; font-size: .8rem; text-align: center; text-decoration: none; }
+.folha-mais .grade-m a.ativo { border-color: var(--primaria); background: #e8f3fa; }
+.folha-mais .grade-m a svg.ic { width: 26px; height: 26px; color: var(--primaria); }
+.folha-mais .grade-m .cont { top: 8px; left: auto; right: 10px; }
+.folha-mais .sair-m { margin-top: 1em; width: 100%; display: flex; justify-content: center; align-items: center; gap: .5em; padding: .8em; border-radius: 14px; border: 1px solid #e3ebf4; background: #fff; color: var(--vermelho); font: inherit; font-weight: 700; cursor: pointer; }
+.folha-mais .sair-m svg.ic { width: 1.1em; height: 1.1em; }

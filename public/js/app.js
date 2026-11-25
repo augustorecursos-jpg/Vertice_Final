@@ -55,6 +55,7 @@
     cadeado: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
     destravar: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>',
     chave: '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/>',
+    pontos: '<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>',
     camera: '<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="13" r="3.5"/>',
     imagem: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/>',
     pix: '<path d="M12 2.5 21.5 12 12 21.5 2.5 12z"/><path d="M7.5 8.5c1.4 0 2.3.6 3.2 1.5L12 11.3l1.3-1.3c.9-.9 1.8-1.5 3.2-1.5M7.5 15.5c1.4 0 2.3-.6 3.2-1.5l1.3-1.3 1.3 1.3c.9.9 1.8 1.5 3.2 1.5"/>',
@@ -808,8 +809,10 @@
   }
 
   // ---------- render ----------
+  let navCel = null; // menu do celular (4 atalhos + Mais)
   function render() {
     if (modoEmpresa) return;
+    navCel?.atualizar(est.secao);
     $$('main > section').forEach((s) => { s.hidden = s.dataset.secao !== est.secao; });
     $$('#menu a').forEach((a) => a.classList.toggle('ativo', a.dataset.secao === est.secao));
     $$('#menu a').forEach((a) => { if (a.dataset.secao === est.secao) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
@@ -3073,6 +3076,8 @@
     $('#link-admin').hidden = eu.perfil !== 'admin';
     $('#link-empresas').hidden = eu.perfil !== 'admin';
     $('#grupo-admin').hidden = eu.perfil !== 'admin';
+    navCel = window.VerticeNav.criar({ ic, abrirModal, fixos: ['mes', 'calendario', 'dashboard', 'sim'],
+      mais: [['Finanças', ['ano', 'planos', 'ajustes']], ['Administração', ['usuarios', 'empresas']]] });
     marcarSinc('ok');
     lerHash();
     if (eu.trocarSenha) trocarSenha({ obrigatoria: true });

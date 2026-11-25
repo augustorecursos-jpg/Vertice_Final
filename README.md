@@ -64,6 +64,8 @@ Conta de empresa com gestão financeira gerencial. **Quem cria e controla empres
 
 ## O app
 
+- **Menu no celular:** 4 atalhos fixos e **Mais** (painel com as outras telas e o Sair). Pessoa física: Mês, Agenda, Painel, Simular; administrador vê também Clientes e Empresas no Mais; empresa: Painel, Contas, Agenda, Orç. × real. Avisos de telas que estão no Mais aparecem no próprio botão Mais. No computador, o menu lateral continua igual.
+
 - **Lançamentos:** cada lançamento tem vencimento, e os atrasados e próximos de vencer ficam destacados. Tem recorrência mensal e parcelamento (o valor é guardado em centavos, então as parcelas fecham o total exato). Séries são editadas ou excluídas só no mês, dali em diante ou inteiras.
 - **Mês:** saldo previsto e realizado, falta pagar, receitas e investimentos. Há filtros, busca e "Desfazer".
 - **Calendário:** os vencimentos do mês numa grade colorida (cada cor é uma categoria), com o total do dia, pagos apagados e atrasados em vermelho. Mostra quanto vence hoje, nos próximos 7 dias, o que está atrasado e o que falta pagar no mês. Tocar num dia abre as contas dele, com **Marcar pago** e **Lançar neste dia**. Tem as visões Mês, Semana e Lista e os filtros A pagar, A receber, Atrasados e Cartões. No celular, cada dia mostra bolinhas coloridas.

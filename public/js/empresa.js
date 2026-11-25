@@ -51,6 +51,8 @@
     $('#conteudo').insertAdjacentHTML('beforeend', '<div id="pj" class="pj"></div>');
     document.body.insertAdjacentHTML('beforeend', `<button type="button" class="fab" data-pj-novo hidden aria-label="Novo lançamento">${ic('mais')}</button>`);
     const raiz = $('#pj');
+    const navCel = window.VerticeNav.criar({ ic, abrirModal, fixos: ['painel', 'contas', 'calendario', 'ovr'],
+      mais: [['Gestão', ['orcamento', 'dre', 'caixa']], ['Cadastros e conta', ['cadastros', 'equipe', 'conta']]] });
     ligarTip(raiz);
 
     async function carregar() {
@@ -60,6 +62,7 @@
     }
 
     function render() {
+      navCel.atualizar(est.secao);
       $$('#menu a').forEach((a) => { const at = a.dataset.secao === est.secao; a.classList.toggle('ativo', at); if (at) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
       const h = new Date().getHours(), nome = (eu.nome || '').trim().split(/\s+/)[0];
       $('#pj-ola').textContent = `${h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite'}${nome ? ', ' + nome : ''}`;
